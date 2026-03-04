@@ -111,45 +111,51 @@ export class CommunityService implements ICommunityService {
     const codeSnippets = params.contextData.codeSnippets ?? null;
     const relatedAssets = params.contextData.relatedAssets ?? null;
 
-    await db.insert(communityTopicsTable).values({
-      id,
-      authorId: params.authorUserId ?? params.authorNodeId,
-      channelId: params.channelId,
-      title: params.title,
-      body: bodyText,
-      postType: params.postType,
-      tags: tags as unknown as null,
-      contextData: params.contextData as unknown as null,
-      codeSnippets: codeSnippets as unknown as null,
-      relatedAssets: relatedAssets as unknown as null,
-      score: 0,
-      upvotes: 0,
-      downvotes: 0,
-      replyCount: 0,
-      viewCount: 0,
-      isPinned: 0,
-      isLocked: 0,
-      isDistilled: 0,
-    });
+    // Wrap post insert + channel counter increment in a transaction
+    // so the counter stays accurate even under concurrent creates.
+    const post = await db.transaction(async (tx) => {
+      await tx.insert(communityTopicsTable).values({
+        id,
+        authorId: params.authorUserId ?? params.authorNodeId,
+        channelId: params.channelId,
+        title: params.title,
+        body: bodyText,
+        postType: params.postType,
+        tags: tags as unknown as null,
+        contextData: params.contextData as unknown as null,
+        codeSnippets: codeSnippets as unknown as null,
+        relatedAssets: relatedAssets as unknown as null,
+        score: 0,
+        upvotes: 0,
+        downvotes: 0,
+        replyCount: 0,
+        viewCount: 0,
+        isPinned: 0,
+        isLocked: 0,
+        isDistilled: 0,
+      });
 
-    // Increment channel post count
-    await db
-      .update(communityChannelsTable)
-      .set({ postCount: sql`${communityChannelsTable.postCount} + 1` })
-      .where(eq(communityChannelsTable.id, params.channelId));
+      // Increment channel post count
+      await tx
+        .update(communityChannelsTable)
+        .set({ postCount: sql`${communityChannelsTable.postCount} + 1` })
+        .where(eq(communityChannelsTable.id, params.channelId));
+
+      const rows = await tx
+        .select()
+        .from(communityTopicsTable)
+        .where(eq(communityTopicsTable.id, id))
+        .limit(1);
+
+      return rowToPost(rows[0]!);
+    });
 
     logger.info(
       { postId: id, channelId: params.channelId, postType: params.postType },
       "Post created",
     );
 
-    const rows = await db
-      .select()
-      .from(communityTopicsTable)
-      .where(eq(communityTopicsTable.id, id))
-      .limit(1);
-
-    return rowToPost(rows[0]!);
+    return post;
   }
 
   /**
@@ -357,35 +363,42 @@ export class CommunityService implements ICommunityService {
     }
 
     const id = uuidv4();
-    await db.insert(communityRepliesTable).values({
-      id,
-      topicId: params.topicId,
-      authorId: params.userId ?? params.nodeId,
-      body: params.content,
-      isSolution: 0,
-    });
 
-    // Increment topic reply count and update lastReplyAt
-    await db
-      .update(communityTopicsTable)
-      .set({
-        replyCount: sql`${communityTopicsTable.replyCount} + 1`,
-        lastReplyAt: new Date(),
-      })
-      .where(eq(communityTopicsTable.id, params.topicId));
+    // Wrap reply insert + topic counter increment in a transaction
+    // so the replyCount stays accurate even under concurrent replies.
+    const created = await db.transaction(async (tx) => {
+      await tx.insert(communityRepliesTable).values({
+        id,
+        topicId: params.topicId,
+        authorId: params.userId ?? params.nodeId,
+        body: params.content,
+        isSolution: 0,
+      });
+
+      // Increment topic reply count and update lastReplyAt
+      await tx
+        .update(communityTopicsTable)
+        .set({
+          replyCount: sql`${communityTopicsTable.replyCount} + 1`,
+          lastReplyAt: new Date(),
+        })
+        .where(eq(communityTopicsTable.id, params.topicId));
+
+      const rows = await tx
+        .select()
+        .from(communityRepliesTable)
+        .where(eq(communityRepliesTable.id, id))
+        .limit(1);
+
+      return rows[0] as unknown as Record<string, unknown>;
+    });
 
     logger.info(
       { replyId: id, topicId: params.topicId },
       "Reply created",
     );
 
-    const created = await db
-      .select()
-      .from(communityRepliesTable)
-      .where(eq(communityRepliesTable.id, id))
-      .limit(1);
-
-    return created[0] as unknown as Record<string, unknown>;
+    return created;
   }
 
   /**
@@ -683,7 +696,7 @@ export class CommunityService implements ICommunityService {
   ): Promise<{ subscribed: boolean }> {
     const db = getDb();
 
-    // Verify channel exists
+    // Verify channel exists (read outside transaction is fine for existence check)
     const channelRows = await db
       .select({ id: communityChannelsTable.id })
       .from(communityChannelsTable)
@@ -694,38 +707,51 @@ export class CommunityService implements ICommunityService {
       throw new NotFoundError("Channel");
     }
 
-    // Check if already subscribed
-    const existing = await db
-      .select({ id: communitySubscriptionsTable.id })
-      .from(communitySubscriptionsTable)
-      .where(
-        and(
-          eq(communitySubscriptionsTable.nodeId, nodeId),
-          eq(communitySubscriptionsTable.channelId, channelId),
-        ),
-      )
-      .limit(1);
+    // Wrap check + insert + counter increment in a transaction to prevent
+    // duplicate subscriptions and counter drift from concurrent requests.
+    return await db.transaction(async (tx) => {
+      // Check if already subscribed
+      const existing = await tx
+        .select({ id: communitySubscriptionsTable.id })
+        .from(communitySubscriptionsTable)
+        .where(
+          and(
+            eq(communitySubscriptionsTable.nodeId, nodeId),
+            eq(communitySubscriptionsTable.channelId, channelId),
+          ),
+        )
+        .limit(1);
 
-    if (existing.length > 0) {
-      return { subscribed: true }; // Already subscribed (idempotent)
-    }
+      if (existing.length > 0) {
+        return { subscribed: true }; // Already subscribed (idempotent)
+      }
 
-    await db.insert(communitySubscriptionsTable).values({
-      id: uuidv4(),
-      nodeId,
-      channelId,
+      try {
+        await tx.insert(communitySubscriptionsTable).values({
+          id: uuidv4(),
+          nodeId,
+          channelId,
+        });
+      } catch (err: unknown) {
+        const error = err as { code?: string };
+        if (error.code === "ER_DUP_ENTRY") {
+          // Concurrent insert won the race -- treat as idempotent success
+          return { subscribed: true };
+        }
+        throw err;
+      }
+
+      // Increment subscriber count
+      await tx
+        .update(communityChannelsTable)
+        .set({
+          subscriberCount: sql`${communityChannelsTable.subscriberCount} + 1`,
+        })
+        .where(eq(communityChannelsTable.id, channelId));
+
+      logger.info({ channelId, nodeId }, "Subscribed to channel");
+      return { subscribed: true };
     });
-
-    // Increment subscriber count
-    await db
-      .update(communityChannelsTable)
-      .set({
-        subscriberCount: sql`${communityChannelsTable.subscriberCount} + 1`,
-      })
-      .where(eq(communityChannelsTable.id, channelId));
-
-    logger.info({ channelId, nodeId }, "Subscribed to channel");
-    return { subscribed: true };
   }
 
   /**
@@ -737,35 +763,39 @@ export class CommunityService implements ICommunityService {
   ): Promise<{ unsubscribed: boolean }> {
     const db = getDb();
 
-    const existing = await db
-      .select({ id: communitySubscriptionsTable.id })
-      .from(communitySubscriptionsTable)
-      .where(
-        and(
-          eq(communitySubscriptionsTable.nodeId, nodeId),
-          eq(communitySubscriptionsTable.channelId, channelId),
-        ),
-      )
-      .limit(1);
+    // Wrap check + delete + counter decrement in a transaction to prevent
+    // counter drift from concurrent unsubscribe requests.
+    return await db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ id: communitySubscriptionsTable.id })
+        .from(communitySubscriptionsTable)
+        .where(
+          and(
+            eq(communitySubscriptionsTable.nodeId, nodeId),
+            eq(communitySubscriptionsTable.channelId, channelId),
+          ),
+        )
+        .limit(1);
 
-    if (existing.length === 0) {
-      return { unsubscribed: true }; // Not subscribed (idempotent)
-    }
+      if (existing.length === 0) {
+        return { unsubscribed: true }; // Not subscribed (idempotent)
+      }
 
-    await db
-      .delete(communitySubscriptionsTable)
-      .where(eq(communitySubscriptionsTable.id, existing[0]!.id));
+      await tx
+        .delete(communitySubscriptionsTable)
+        .where(eq(communitySubscriptionsTable.id, existing[0]!.id));
 
-    // Decrement subscriber count (floor at 0)
-    await db
-      .update(communityChannelsTable)
-      .set({
-        subscriberCount: sql`GREATEST(${communityChannelsTable.subscriberCount} - 1, 0)`,
-      })
-      .where(eq(communityChannelsTable.id, channelId));
+      // Decrement subscriber count (floor at 0)
+      await tx
+        .update(communityChannelsTable)
+        .set({
+          subscriberCount: sql`GREATEST(${communityChannelsTable.subscriberCount} - 1, 0)`,
+        })
+        .where(eq(communityChannelsTable.id, channelId));
 
-    logger.info({ channelId, nodeId }, "Unsubscribed from channel");
-    return { unsubscribed: true };
+      logger.info({ channelId, nodeId }, "Unsubscribed from channel");
+      return { unsubscribed: true };
+    });
   }
 
   // ─── Following ─────────────────────────────────

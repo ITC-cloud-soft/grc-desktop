@@ -13,7 +13,7 @@ export interface IAuthUser {
   avatarUrl: string | null;
   email: string | null;
   tier: "free" | "pro" | "contributor";
-  role: "admin" | "user";
+  role: "admin" | "user" | "banned";
   createdAt: Date;
   updatedAt: Date;
 }

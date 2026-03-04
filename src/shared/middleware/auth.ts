@@ -91,6 +91,7 @@ export function createAuthMiddleware(config: GrcConfig, required = true) {
         req.auth = {
           sub: resolved.userId,
           tier: resolved.tier,
+          role: "user", // API keys cannot have admin role
           scopes: resolved.scopes,
         };
         return next();

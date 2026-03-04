@@ -44,7 +44,7 @@ async function main() {
     }),
   );
   app.use((req, res, next) => {
-    express.json({ limit: "10mb" })(req, res, (err) => {
+    express.json({ limit: "1mb" })(req, res, (err) => {
       if (err) {
         return res.status(400).json({
           error: "bad_request",

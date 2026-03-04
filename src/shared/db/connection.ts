@@ -23,7 +23,7 @@ export async function initDatabase(databaseUrl: string) {
     uri: databaseUrl,
     waitForConnections: true,
     connectionLimit: 20,
-    queueLimit: 0,
+    queueLimit: 100,
     enableKeepAlive: true,
     keepAliveInitialDelay: 30_000,
   });

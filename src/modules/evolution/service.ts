@@ -62,32 +62,6 @@ function rowToAsset(
   };
 }
 
-function rowToAssetSummary(
-  row: Record<string, unknown>,
-  type: AssetType,
-): IEvolutionAsset {
-  return {
-    id: row.id as string,
-    assetId: row.assetId as string,
-    type,
-    nodeId: row.nodeId as string,
-    userId: (row.userId as string) ?? undefined,
-    category: (row.category as string) ?? undefined,
-    status: row.status as AssetStatus,
-    signalsMatch: (row.signalsMatch as string[] | null) ?? [],
-    contentHash: row.contentHash as string,
-    signature: (row.signature as string) ?? undefined,
-    useCount: row.useCount as number,
-    failCount: (row.failCount as number) ?? 0,
-    successRate: row.successRate as number,
-    safetyScore: (row.safetyScore as number) ?? undefined,
-    chainId: (row.chainId as string) ?? undefined,
-    schemaVersion: (row.schemaVersion as string) ?? undefined,
-    createdAt: row.createdAt as Date,
-    updatedAt: row.updatedAt as Date,
-  };
-}
-
 // ── Node Operations ─────────────────────────────
 
 export async function upsertNode(params: {
@@ -149,20 +123,64 @@ export async function upsertNode(params: {
     return updated[0] as unknown as Record<string, unknown>;
   }
 
-  // Insert new node
+  // Insert new node — wrapped in try-catch to handle duplicate key from concurrent requests
   const id = uuidv4();
-  await db.insert(nodesTable).values({
-    id,
-    nodeId: params.nodeId,
-    lastHeartbeat: now,
-    capabilities: params.capabilities ?? null,
-    geneCount: params.geneCount ?? 0,
-    capsuleCount: params.capsuleCount ?? 0,
-    envFingerprint: params.envFingerprint ?? null,
-    platform: params.platform ?? null,
-    winclawVersion: params.winclawVersion ?? null,
-    displayName: params.displayName ?? null,
-  });
+  try {
+    await db.insert(nodesTable).values({
+      id,
+      nodeId: params.nodeId,
+      lastHeartbeat: now,
+      capabilities: params.capabilities ?? null,
+      geneCount: params.geneCount ?? 0,
+      capsuleCount: params.capsuleCount ?? 0,
+      envFingerprint: params.envFingerprint ?? null,
+      platform: params.platform ?? null,
+      winclawVersion: params.winclawVersion ?? null,
+      displayName: params.displayName ?? null,
+    });
+  } catch (err: unknown) {
+    // Handle duplicate key — another concurrent request beat us
+    if (err && typeof err === "object" && "code" in err && (err as any).code === "ER_DUP_ENTRY") {
+      logger.info({ nodeId: params.nodeId }, "Duplicate node insert detected — falling back to update");
+      // Update instead
+      await db
+        .update(nodesTable)
+        .set({
+          lastHeartbeat: now,
+          ...(params.capabilities !== undefined && {
+            capabilities: params.capabilities,
+          }),
+          ...(params.geneCount !== undefined && {
+            geneCount: params.geneCount,
+          }),
+          ...(params.capsuleCount !== undefined && {
+            capsuleCount: params.capsuleCount,
+          }),
+          ...(params.envFingerprint !== undefined && {
+            envFingerprint: params.envFingerprint,
+          }),
+          ...(params.platform !== undefined && {
+            platform: params.platform,
+          }),
+          ...(params.winclawVersion !== undefined && {
+            winclawVersion: params.winclawVersion,
+          }),
+          ...(params.displayName !== undefined && {
+            displayName: params.displayName,
+          }),
+        })
+        .where(eq(nodesTable.nodeId, params.nodeId));
+
+      const fallbackRow = await db
+        .select()
+        .from(nodesTable)
+        .where(eq(nodesTable.nodeId, params.nodeId))
+        .limit(1);
+
+      return fallbackRow[0] as unknown as Record<string, unknown>;
+    }
+    throw err;
+  }
 
   const created = await db
     .select()
@@ -305,7 +323,8 @@ export class EvolutionService implements IEvolutionService {
 
   /**
    * Fetch an asset by asset_id or content_hash.
-   * Increments use_count on successful fetch.
+   * Pure read -- does not modify the asset. Use recordAssetFetch()
+   * separately to increment use_count when appropriate.
    */
   async fetchAsset(
     assetIdOrHash: string,
@@ -331,17 +350,8 @@ export class EvolutionService implements IEvolutionService {
         return null;
       }
 
-      // Increment use_count
-      await db
-        .update(genesTable)
-        .set({ useCount: sql`${genesTable.useCount} + 1` })
-        .where(eq(genesTable.id, geneRows[0]!.id));
-
       const row = geneRows[0] as unknown as Record<string, unknown>;
-      return rowToAsset(
-        { ...row, useCount: (row.useCount as number) + 1 },
-        "gene",
-      );
+      return rowToAsset(row, "gene");
     }
 
     // Search capsules
@@ -363,19 +373,59 @@ export class EvolutionService implements IEvolutionService {
         return null;
       }
 
+      const row = capsuleRows[0] as unknown as Record<string, unknown>;
+      return rowToAsset(row, "capsule");
+    }
+
+    return null;
+  }
+
+  /**
+   * Record that an asset was fetched (increment use_count).
+   * Should be called from the A2A fetch endpoint only, not from
+   * internal reads, to avoid inflating usage counters.
+   */
+  async recordAssetFetch(assetIdOrHash: string): Promise<void> {
+    const db = getDb();
+
+    // Try genes first
+    const geneRows = await db
+      .select({ id: genesTable.id })
+      .from(genesTable)
+      .where(
+        or(
+          eq(genesTable.assetId, assetIdOrHash),
+          eq(genesTable.contentHash, assetIdOrHash),
+        ),
+      )
+      .limit(1);
+
+    if (geneRows.length > 0) {
+      await db
+        .update(genesTable)
+        .set({ useCount: sql`${genesTable.useCount} + 1` })
+        .where(eq(genesTable.id, geneRows[0]!.id));
+      return;
+    }
+
+    // Try capsules
+    const capsuleRows = await db
+      .select({ id: capsulesTable.id })
+      .from(capsulesTable)
+      .where(
+        or(
+          eq(capsulesTable.assetId, assetIdOrHash),
+          eq(capsulesTable.contentHash, assetIdOrHash),
+        ),
+      )
+      .limit(1);
+
+    if (capsuleRows.length > 0) {
       await db
         .update(capsulesTable)
         .set({ useCount: sql`${capsulesTable.useCount} + 1` })
         .where(eq(capsulesTable.id, capsuleRows[0]!.id));
-
-      const row = capsuleRows[0] as unknown as Record<string, unknown>;
-      return rowToAsset(
-        { ...row, useCount: (row.useCount as number) + 1 },
-        "capsule",
-      );
     }
-
-    return null;
   }
 
   /**
@@ -397,6 +447,7 @@ export class EvolutionService implements IEvolutionService {
 
     let totalGenes = 0;
     let totalCapsules = 0;
+    const hasSignalFilter = params.signals && params.signals.length > 0;
 
     if (shouldSearchGenes) {
       // Build gene where conditions
@@ -432,18 +483,28 @@ export class EvolutionService implements IEvolutionService {
         .limit(limit)
         .offset(offset);
 
+      let genesFetchedCount = 0;
       for (const row of geneRows) {
+        genesFetchedCount++;
         const r = row as unknown as Record<string, unknown>;
-        // Filter by signals if specified
-        if (params.signals && params.signals.length > 0) {
+        // Filter by signals if specified (post-filter — may reduce result count)
+        if (hasSignalFilter) {
           const assetSignals =
             (r.signalsMatch as string[] | null) ?? [];
-          const hasMatch = params.signals.some((s) =>
+          const hasMatch = params.signals!.some((s) =>
             assetSignals.includes(s),
           );
           if (!hasMatch) continue;
         }
-        results.push(rowToAssetSummary(r, "gene"));
+        results.push(rowToAsset(r, "gene"));
+      }
+
+      // When signal filtering is active, the DB total is inaccurate because
+      // signals are filtered in-memory. Adjust the total to reflect the
+      // actual filtered count from this page (approximate).
+      if (hasSignalFilter && genesFetchedCount > 0) {
+        const matchRatio = results.length / genesFetchedCount;
+        totalGenes = Math.round(totalGenes * matchRatio);
       }
     }
 
@@ -475,7 +536,7 @@ export class EvolutionService implements IEvolutionService {
 
       for (const row of capsuleRows) {
         const r = row as unknown as Record<string, unknown>;
-        results.push(rowToAssetSummary(r, "capsule"));
+        results.push(rowToAsset(r, "capsule"));
       }
     }
 
@@ -540,7 +601,7 @@ export class EvolutionService implements IEvolutionService {
       currentRow = capsuleRows[0] as unknown as Record<string, unknown>;
     }
 
-    // Insert the report with new column names
+    // Insert the report outside the critical transaction (append-only, safe)
     await db.insert(assetReportsTable).values({
       id: uuidv4(),
       assetId: params.assetId,
@@ -551,59 +612,95 @@ export class EvolutionService implements IEvolutionService {
       details: params.reportData ?? null,
     });
 
-    // Use atomic SQL increment to prevent race conditions when
-    // multiple nodes report usage concurrently.
-    // failCount is incremented on failure, useCount always incremented.
-    const failIncrement = params.success ? 0 : 1;
-    await db
-      .update(table)
-      .set({
-        useCount: sql`${table.useCount} + 1`,
-        ...(assetType === "gene"
-          ? { failCount: sql`${(table as typeof genesTable).failCount} + ${failIncrement}` }
-          : {}),
-        successRate: sql`CASE WHEN (${table.useCount} + 1) > 0 THEN (${table.useCount} + 1 - ${assetType === "gene" ? sql`${(table as typeof genesTable).failCount} + ${failIncrement}` : sql`0`}) / (${table.useCount} + 1) ELSE 0 END`,
-      })
-      .where(eq(table.assetId, params.assetId));
+    // Wrap counter update + promotion check + status update in a transaction
+    // to prevent race conditions where concurrent reports could read stale
+    // counters and skip or double-trigger promotion/quarantine.
+    const { asset, promotionResult } = await db.transaction(async (tx) => {
+      // Use atomic SQL increment to prevent race conditions when
+      // multiple nodes report usage concurrently.
+      // failCount is incremented on failure, useCount always incremented.
+      const failIncrement = params.success ? 0 : 1;
+      await tx
+        .update(table)
+        .set({
+          useCount: sql`${table.useCount} + 1`,
+          ...(assetType === "gene"
+            ? { failCount: sql`${(table as typeof genesTable).failCount} + ${failIncrement}` }
+            : {}),
+          successRate: sql`CASE WHEN (${table.useCount} + 1) > 0 THEN (${table.useCount} + 1 - ${assetType === "gene" ? sql`${(table as typeof genesTable).failCount} + ${failIncrement}` : sql`0`}) / (${table.useCount} + 1) ELSE 0 END`,
+        })
+        .where(eq(table.assetId, params.assetId));
 
-    // Re-read for accurate values after atomic update
-    const refreshedRows = await db
-      .select()
-      .from(table)
-      .where(eq(table.assetId, params.assetId))
-      .limit(1);
-    const refreshedRow = refreshedRows[0] as unknown as Record<string, unknown>;
-    const newUseCount = refreshedRow.useCount as number;
-    const newSuccessRate = refreshedRow.successRate as number;
+      // Re-read for accurate values after atomic update
+      const refreshedRows = await tx
+        .select()
+        .from(table)
+        .where(eq(table.assetId, params.assetId))
+        .limit(1);
+      const refreshedRow = refreshedRows[0] as unknown as Record<string, unknown>;
+      const newUseCount = refreshedRow.useCount as number;
+      const newSuccessRate = refreshedRow.successRate as number;
 
-    // Check auto-promotion/quarantine
-    const promotionResult = checkPromotion({
-      status: currentRow.status as AssetStatus,
-      useCount: newUseCount,
-      successRate: newSuccessRate,
-    });
+      // Check auto-promotion/quarantine
+      const txPromotionResult = checkPromotion({
+        status: currentRow.status as AssetStatus,
+        useCount: newUseCount,
+        successRate: newSuccessRate,
+      });
 
-    if (promotionResult.shouldPromote) {
-      await this.updateStatus(params.assetId, "promoted", promotionResult.reason);
-    } else if (promotionResult.shouldQuarantine) {
-      await this.updateStatus(
-        params.assetId,
-        "quarantined",
-        promotionResult.reason,
+      // Apply status change within the same transaction
+      if (txPromotionResult.shouldPromote) {
+        const updateSet: Record<string, unknown> = {
+          status: "promoted" as AssetStatus,
+          promotedAt: new Date(),
+        };
+        await tx
+          .update(table)
+          .set(updateSet as { status: string; promotedAt?: Date })
+          .where(eq(table.assetId, params.assetId));
+
+        await tx.insert(evolutionEventsTable).values({
+          id: uuidv4(),
+          assetId: params.assetId,
+          assetType,
+          eventType: "promoted",
+          nodeId: null,
+          details: txPromotionResult.reason ? { reason: txPromotionResult.reason } : null,
+        });
+
+        logger.info({ assetId: params.assetId, status: "promoted", reason: txPromotionResult.reason }, "Asset status updated");
+      } else if (txPromotionResult.shouldQuarantine) {
+        await tx
+          .update(table)
+          .set({ status: "quarantined" as AssetStatus })
+          .where(eq(table.assetId, params.assetId));
+
+        await tx.insert(evolutionEventsTable).values({
+          id: uuidv4(),
+          assetId: params.assetId,
+          assetType,
+          eventType: "quarantined",
+          nodeId: null,
+          details: txPromotionResult.reason ? { reason: txPromotionResult.reason } : null,
+        });
+
+        logger.info({ assetId: params.assetId, status: "quarantined", reason: txPromotionResult.reason }, "Asset status updated");
+      }
+
+      // Fetch final asset state within the transaction
+      const updatedRows = await tx
+        .select()
+        .from(table)
+        .where(eq(table.assetId, params.assetId))
+        .limit(1);
+
+      const txAsset = rowToAsset(
+        updatedRows[0] as unknown as Record<string, unknown>,
+        assetType,
       );
-    }
 
-    // Fetch updated asset
-    const updatedRows = await db
-      .select()
-      .from(table)
-      .where(eq(table.assetId, params.assetId))
-      .limit(1);
-
-    const asset = rowToAsset(
-      updatedRows[0] as unknown as Record<string, unknown>,
-      assetType,
-    );
+      return { asset: txAsset, promotionResult: txPromotionResult };
+    });
 
     return { asset, promotionResult };
   }

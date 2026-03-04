@@ -16,6 +16,7 @@ import {
   BadRequestError,
   NotFoundError,
 } from "../../shared/middleware/error-handler.js";
+import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import {
   semverSchema,
   platformSchema,
@@ -130,6 +131,7 @@ export async function register(app: Express, _config: GrcConfig) {
 
   router.post(
     "/report",
+    rateLimitMiddleware,
     asyncHandler(async (req: Request, res: Response) => {
       const body = updateReportBodySchema.parse(req.body);
 

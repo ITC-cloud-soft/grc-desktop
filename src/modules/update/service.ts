@@ -48,7 +48,10 @@ function parseSemver(version: string): SemverParts | null {
 function compareSemver(a: string, b: string): number {
   const pa = parseSemver(a);
   const pb = parseSemver(b);
-  if (!pa || !pb) return 0;
+  if (!pa || !pb) {
+    logger.warn({ v1: a, v2: b }, "Failed to parse semver version");
+    return 0;
+  }
 
   if (pa.major !== pb.major) return pa.major > pb.major ? 1 : -1;
   if (pa.minor !== pb.minor) return pa.minor > pb.minor ? 1 : -1;

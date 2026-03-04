@@ -23,6 +23,10 @@ import { publishSkill } from "./service.js";
 
 const logger = pino({ name: "admin:clawhub" });
 
+function escapeLikePattern(s: string): string {
+  return s.replace(/[%_\\]/g, "\\$&");
+}
+
 // ── Zod Schemas ─────────────────────────────────
 
 const skillListQuerySchema = paginationSchema.extend({
@@ -69,7 +73,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       }
       // Text search: match against name, slug, or description
       if (query.search) {
-        const pattern = `%${query.search}%`;
+        const pattern = `%${escapeLikePattern(query.search)}%`;
         conditions.push(
           or(
             like(skillsTable.name, pattern),

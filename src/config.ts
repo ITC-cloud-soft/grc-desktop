@@ -143,10 +143,15 @@ export function loadConfig(): GrcConfig {
     logLevel: envString("LOG_LEVEL", "info"),
 
     database: {
-      url: envString(
-        "DATABASE_URL",
-        "mysql://root:Admin123@localhost:3306/grc-server",
-      ),
+      url: (() => {
+        const url = envString("DATABASE_URL", "");
+        if (nodeEnv === "production" && !url) {
+          throw new Error(
+            "FATAL: DATABASE_URL must be set in production.",
+          );
+        }
+        return url || "mysql://root:root@localhost:3306/grc-server-dev";
+      })(),
     },
 
     redis: {
@@ -156,22 +161,22 @@ export function loadConfig(): GrcConfig {
     minio: {
       endpoint: envString("MINIO_ENDPOINT", "localhost"),
       port: envInt("MINIO_PORT", 9000),
-      accessKey: envString("MINIO_ACCESS_KEY", "minioadmin"),
-      secretKey: envString("MINIO_SECRET_KEY", "minioadmin"),
+      accessKey: envString("MINIO_ACCESS_KEY", ""),
+      secretKey: envString("MINIO_SECRET_KEY", ""),
       bucket: envString("MINIO_BUCKET", "grc-assets"),
       useSSL: envBool("MINIO_USE_SSL", false),
     },
 
     meilisearch: {
       url: envString("MEILISEARCH_URL", "http://localhost:7700"),
-      apiKey: envString("MEILISEARCH_KEY", "grc-meili-key"),
+      apiKey: envString("MEILISEARCH_KEY", ""),
     },
 
     jwt: {
       privateKey: jwtPrivateKey,
       publicKey: jwtPublicKey,
       issuer: envString("JWT_ISSUER", "grc.winclawhub.ai"),
-      expiresIn: envString("JWT_EXPIRES_IN", "24h"),
+      expiresIn: envString("JWT_EXPIRES_IN", "15m"),
       refreshTokenExpiresIn: envString("JWT_REFRESH_EXPIRES_IN", "30d"),
     },
 

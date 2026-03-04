@@ -14,6 +14,7 @@ import {
   asyncHandler,
   BadRequestError,
 } from "../../shared/middleware/error-handler.js";
+import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { telemetryReportSchema } from "../../shared/utils/validators.js";
 import { TelemetryService } from "./service.js";
 
@@ -27,6 +28,7 @@ export async function register(app: Express, _config: GrcConfig) {
 
   router.post(
     "/report",
+    rateLimitMiddleware,
     asyncHandler(async (req: Request, res: Response) => {
       const body = telemetryReportSchema.parse(req.body);
 

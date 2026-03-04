@@ -60,11 +60,11 @@ describe('module-loader structure', () => {
       expect(moduleMapKeys).toEqual(adminModuleMapKeys);
     });
 
-    it('has exactly 6 admin module entries', () => {
+    it('has exactly 7 admin module entries', () => {
       // Count occurrences of admin-routes.js imports
       const adminImportMatches = source.match(/admin-routes\.js/g);
       expect(adminImportMatches).not.toBeNull();
-      expect(adminImportMatches!.length).toBe(6);
+      expect(adminImportMatches!.length).toBe(7);
     });
   });
 

@@ -80,19 +80,22 @@ const OBFUSCATION_PATTERNS: Array<[RegExp, string]> = [
 
 /**
  * Recursively extract all string values from a nested object.
+ * Limits recursion depth to prevent stack overflow on deeply nested payloads.
  */
-function extractStrings(obj: unknown): string[] {
+function extractStrings(obj: unknown, maxDepth = 20): string[] {
+  if (maxDepth <= 0) return [];
+
   const strings: string[] = [];
 
   if (typeof obj === "string") {
     strings.push(obj);
   } else if (Array.isArray(obj)) {
     for (const item of obj) {
-      strings.push(...extractStrings(item));
+      strings.push(...extractStrings(item, maxDepth - 1));
     }
   } else if (obj !== null && typeof obj === "object") {
     for (const value of Object.values(obj as Record<string, unknown>)) {
-      strings.push(...extractStrings(value));
+      strings.push(...extractStrings(value, maxDepth - 1));
     }
   }
 

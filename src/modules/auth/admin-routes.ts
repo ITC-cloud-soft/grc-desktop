@@ -8,7 +8,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { eq, desc, sql, and, gte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, isNull } from "drizzle-orm";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
@@ -16,7 +16,7 @@ import { createAdminAuthMiddleware } from "../../shared/middleware/admin-auth.js
 import { asyncHandler, NotFoundError, BadRequestError } from "../../shared/middleware/error-handler.js";
 import { getDb } from "../../shared/db/connection.js";
 import { uuidSchema, paginationSchema } from "../../shared/utils/validators.js";
-import { users, apiKeys } from "./schema.js";
+import { users, apiKeys, refreshTokens } from "./schema.js";
 
 const logger = pino({ name: "admin:auth" });
 
@@ -54,7 +54,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
   router.get(
     "/stats",
-    requireAuth,
+    requireAuth, requireAdmin,
     asyncHandler(async (_req: Request, res: Response) => {
       const db = getDb();
       const sevenDaysAgo = new Date();
@@ -167,7 +167,18 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
       const [rows, totalResult] = await Promise.all([
         db
-          .select()
+          .select({
+            id: users.id,
+            provider: users.provider,
+            providerId: users.providerId,
+            displayName: users.displayName,
+            avatarUrl: users.avatarUrl,
+            email: users.email,
+            tier: users.tier,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          })
           .from(users)
           .where(where)
           .orderBy(desc(users.createdAt))
@@ -203,7 +214,18 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       const id = uuidSchema.parse(req.params.id);
 
       const rows = await db
-        .select()
+        .select({
+          id: users.id,
+          provider: users.provider,
+          providerId: users.providerId,
+          displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
+          email: users.email,
+          tier: users.tier,
+          role: users.role,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        })
         .from(users)
         .where(eq(users.id, id))
         .limit(1);
@@ -276,6 +298,15 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         .update(users)
         .set({ role: newRole })
         .where(eq(users.id, id));
+
+      // Revoke all refresh tokens for banned users
+      if (body.banned) {
+        await db
+          .update(refreshTokens)
+          .set({ revokedAt: sql`CURRENT_TIMESTAMP` })
+          .where(and(eq(refreshTokens.userId, id), isNull(refreshTokens.revokedAt)));
+        logger.info({ userId: id }, "All refresh tokens revoked due to ban");
+      }
 
       logger.info({ userId: id, banned: body.banned, admin: req.auth?.sub }, "User ban status changed");
 

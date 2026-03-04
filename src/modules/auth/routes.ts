@@ -6,7 +6,7 @@
  */
 
 import { Router } from "express";
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import passport from "passport";
 import { Strategy as GitHubStrategy } from "passport-github2";
 import {
@@ -15,7 +15,7 @@ import {
   type Profile as GoogleProfile,
   type VerifyCallback as GoogleVerifyCallback,
 } from "passport-google-oauth20";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHmac } from "node:crypto";
 import { z } from "zod";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
@@ -29,6 +29,7 @@ import {
   ConflictError,
   NotFoundError,
   UnauthorizedError,
+  ForbiddenError,
 } from "../../shared/middleware/error-handler.js";
 import { signToken, type JwtPayload } from "../../shared/utils/jwt.js";
 import { nodeIdSchema, uuidSchema } from "../../shared/utils/validators.js";
@@ -42,9 +43,11 @@ const anonymousBodySchema = z.object({
   node_id: nodeIdSchema,
 });
 
+const VALID_API_SCOPES = ["read", "write", "publish"] as const;
+
 const createApiKeySchema = z.object({
   name: z.string().min(1).max(100),
-  scopes: z.array(z.string()).min(1).default(["read", "write"]),
+  scopes: z.array(z.enum(VALID_API_SCOPES)).min(1).default(["read", "write"]),
   expires_in_days: z.number().int().min(1).max(365).optional(),
 });
 
@@ -66,7 +69,11 @@ const emailRegisterSchema = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(128),
+    .max(128)
+    .refine(
+      (pw) => /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /\d/.test(pw),
+      "Password must contain uppercase, lowercase, and a number",
+    ),
   verification_code: z
     .string()
     .length(6)
@@ -88,10 +95,61 @@ const pairVerifyBodySchema = z.object({
   node_id: nodeIdSchema,
 });
 
+/**
+ * Create a stricter rate limiter for authentication endpoints.
+ * 20 requests per 15 minutes per IP to prevent brute-force attacks.
+ */
+function createAuthRateLimit() {
+  const store = new Map<string, { count: number; resetAt: number }>();
+  const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+  const MAX_REQUESTS = 20;
+
+  // Cleanup expired entries every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of store) {
+      if (now > entry.resetAt) store.delete(key);
+    }
+  }, 5 * 60 * 1000);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const ip =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress ||
+      "unknown";
+    const key = `auth:${ip}`;
+    const now = Date.now();
+
+    let entry = store.get(key);
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + WINDOW_MS };
+      store.set(key, entry);
+    }
+
+    entry.count++;
+
+    if (entry.count > MAX_REQUESTS) {
+      return res.status(429).json({
+        error: "rate_limit_exceeded",
+        message: "Too many authentication attempts. Please try again later.",
+        retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+      });
+    }
+
+    return next();
+  };
+}
+
+let _jwtPrivateKey = "";
+
 export async function register(app: Express, config: GrcConfig) {
   const router = Router();
   const authService = new AuthService(config);
+  _jwtPrivateKey = config.jwt.privateKey;
   const requireAuth = createAuthMiddleware(config);
+
+  // Strict rate limiter for auth endpoints (IP-based, 20 req/15min)
+  const authRateLimit = createAuthRateLimit();
 
   // Register the API key resolver callback so the shared auth middleware
   // can resolve API keys without directly importing the auth module.
@@ -241,6 +299,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/anonymous",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = anonymousBodySchema.parse(req.body);
       const user = await authService.registerAnonymous(body.node_id);
@@ -283,6 +342,10 @@ export async function register(app: Express, config: GrcConfig) {
       "/dev/token",
       asyncHandler(async (req: Request, res: Response) => {
         const body = devTokenSchema.parse(req.body);
+        const devSecret = process.env.DEV_TOKEN_SECRET;
+        if (devSecret && req.headers["x-dev-secret"] !== devSecret) {
+          throw new UnauthorizedError("Invalid dev secret");
+        }
         const user = await authService.registerAnonymous(body.node_id);
 
         const payload: JwtPayload = {
@@ -318,6 +381,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/email/send-code",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = emailSendCodeSchema.parse(req.body);
 
@@ -344,7 +408,7 @@ export async function register(app: Express, config: GrcConfig) {
     asyncHandler(async (req: Request, res: Response) => {
       const body = emailVerifyCodeSchema.parse(req.body);
 
-      const verified = await authService.verifyCode(body.email, body.code);
+      const verified = await authService.verifyCode(body.email, body.code, true);
 
       res.json({
         ok: true,
@@ -355,6 +419,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/email/register",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = emailRegisterSchema.parse(req.body);
 
@@ -408,6 +473,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/email/login",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = emailLoginSchema.parse(req.body);
 
@@ -415,8 +481,13 @@ export async function register(app: Express, config: GrcConfig) {
       try {
         result = await authService.loginWithEmail(body.email, body.password);
       } catch (err) {
-        if (err instanceof Error && err.message === "INVALID_CREDENTIALS") {
-          throw new UnauthorizedError("Invalid email or password");
+        if (err instanceof Error) {
+          if (err.message === "INVALID_CREDENTIALS") {
+            throw new UnauthorizedError("Invalid email or password");
+          }
+          if (err.message === "ACCOUNT_BANNED") {
+            throw new ForbiddenError("This account has been banned");
+          }
         }
         throw err;
       }
@@ -441,6 +512,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/refresh",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = refreshBodySchema.parse(req.body);
 
@@ -576,6 +648,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/pair",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = pairBodySchema.parse(req.body);
       try {
@@ -594,6 +667,7 @@ export async function register(app: Express, config: GrcConfig) {
 
   router.post(
     "/pair/verify",
+    authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
       const body = pairVerifyBodySchema.parse(req.body);
 
@@ -631,6 +705,31 @@ export async function register(app: Express, config: GrcConfig) {
     }),
   );
 
+  // ── Logout ──────────────────────────────────────
+
+  router.post(
+    "/logout",
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = refreshBodySchema.parse(req.body);
+      await authService.revokeRefreshToken(body.refresh_token);
+      res.json({ ok: true, message: "Logged out successfully" });
+    }),
+  );
+
+  // ── Revoke All Sessions (authenticated) ─────────
+
+  router.post(
+    "/revoke-all",
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!req.auth) {
+        throw new UnauthorizedError();
+      }
+      await authService.revokeAllUserTokens(req.auth.sub);
+      res.json({ ok: true, message: "All sessions revoked" });
+    }),
+  );
+
   // ── Mount Routes ────────────────────────────────
 
   app.use("/auth", router);
@@ -662,42 +761,36 @@ function issueJwt(
 }
 
 /**
- * In-memory store for OAuth state tokens (CSRF protection).
- * Each state has a 10-minute TTL. In production with multiple
- * instances, replace with Redis.
- */
-const oauthStates = new Map<string, number>();
-
-// Periodic cleanup of expired states (every 5 minutes)
-setInterval(() => {
-  const now = Date.now();
-  for (const [state, expiresAt] of oauthStates) {
-    if (now > expiresAt) {
-      oauthStates.delete(state);
-    }
-  }
-}, 5 * 60 * 1000);
-
-/**
- * Generate a random state parameter for OAuth CSRF protection.
- * Stores the state with a 10-minute expiration.
+ * Generate a self-validating OAuth state token using HMAC.
+ * No server-side storage needed — works across multiple instances.
  */
 function generateState(): string {
-  const state = randomBytes(16).toString("hex");
-  oauthStates.set(state, Date.now() + 10 * 60 * 1000);
-  return state;
+  const nonce = randomBytes(16).toString("hex");
+  const ts = Date.now().toString();
+  const data = `${nonce}:${ts}`;
+  const sig = createHmac("sha256", _jwtPrivateKey).update(data).digest("hex");
+  return `${data}:${sig}`;
 }
 
 /**
- * Validate and consume an OAuth state parameter.
- * Returns true if the state is valid and not expired.
+ * Validate and consume an OAuth state token.
+ * Verifies HMAC signature and checks 10-minute expiry.
  */
 function validateState(state: string | undefined): boolean {
   if (!state) return false;
-  const expiresAt = oauthStates.get(state);
-  if (!expiresAt) return false;
-  oauthStates.delete(state); // consume the state (one-time use)
-  return Date.now() <= expiresAt;
+  const parts = state.split(":");
+  if (parts.length !== 3) return false;
+  const [nonce, ts, sig] = parts;
+  if (!nonce || !ts || !sig) return false;
+
+  // Check expiry (10 minutes)
+  const timestamp = parseInt(ts, 10);
+  if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) return false;
+
+  // Verify HMAC signature
+  const data = `${nonce}:${ts}`;
+  const expected = createHmac("sha256", _jwtPrivateKey).update(data).digest("hex");
+  return sig === expected;
 }
 
 /**

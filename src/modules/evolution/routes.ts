@@ -17,6 +17,7 @@ import {
   BadRequestError,
   NotFoundError,
 } from "../../shared/middleware/error-handler.js";
+import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import {
   a2aHelloSchema,
   a2aPublishSchema,
@@ -129,7 +130,8 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   // ────────────────────────────────────────────
   router.post(
     "/publish",
-    authOptional,
+    authRequired,
+    rateLimitMiddleware,
     asyncHandler(async (req: Request, res: Response) => {
       const body = a2aPublishSchema.parse(req.body);
 
@@ -165,6 +167,9 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         throw new NotFoundError("Asset");
       }
 
+      // Record the fetch (increment use_count) only from the A2A endpoint
+      await service.recordAssetFetch(key);
+
       res.json({
         ok: true,
         asset,
@@ -177,7 +182,8 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   // ────────────────────────────────────────────
   router.post(
     "/report",
-    authOptional,
+    authRequired,
+    rateLimitMiddleware,
     asyncHandler(async (req: Request, res: Response) => {
       const body = a2aReportSchema.parse(req.body);
 

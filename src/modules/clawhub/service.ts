@@ -27,6 +27,7 @@ import {
 } from "./search.js";
 import {
   uploadTarball,
+  deleteTarball,
   computeSha256,
   getTarballUrl,
 } from "./storage.js";
@@ -478,67 +479,94 @@ export async function publishSkill(input: PublishInput): Promise<{
     isNewSkill = true;
   }
 
-  // Upload tarball to MinIO
+  // Upload tarball to MinIO (outside transaction -- cannot be rolled back)
   const tarballUrl = await uploadTarball(input.slug, input.version, input.tarball);
 
-  // Ensure the parent skill record exists before inserting the version
-  // (skill_versions.skill_id has a FK constraint referencing skills.id)
-  if (isNewSkill) {
-    // Insert new skill record first
-    await db.insert(skillsTable).values({
-      id: skillId,
-      slug: input.slug,
-      name: input.name,
-      description: input.description,
-      authorId: input.authorId,
-      tags: input.tags,
-      latestVersion: input.version,
-      downloadCount: 0,
-      ratingAvg: 0,
-      ratingCount: 0,
-      status: "active",
-    });
-  } else {
-    // Update existing skill with new version and metadata
-    await db
-      .update(skillsTable)
-      .set({
-        name: input.name,
-        description: input.description,
-        tags: input.tags,
-        latestVersion: input.version,
-      })
-      .where(eq(skillsTable.id, skillId));
-  }
-
-  // Create version record (parent skill now guaranteed to exist)
+  // Wrap DB writes in a transaction so skill + version are atomic.
+  // If the transaction fails, clean up the uploaded tarball (best-effort compensation).
   const versionId = uuidv4();
-  await db.insert(skillVersionsTable).values({
-    id: versionId,
-    skillId,
-    version: input.version,
-    changelog: input.changelog ?? null,
-    tarballUrl,
-    checksumSha256: sha256,
-    tarballSize,
-    minWinclawVersion: null,
-  });
+  let skill: SkillRow;
+  let version: SkillVersionRow;
 
-  // Fetch the final skill and version records
-  const [skillRow] = await db
-    .select()
-    .from(skillsTable)
-    .where(eq(skillsTable.id, skillId))
-    .limit(1);
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Ensure the parent skill record exists before inserting the version
+      // (skill_versions.skill_id has a FK constraint referencing skills.id)
+      if (isNewSkill) {
+        // Insert new skill record first
+        await tx.insert(skillsTable).values({
+          id: skillId,
+          slug: input.slug,
+          name: input.name,
+          description: input.description,
+          authorId: input.authorId,
+          tags: input.tags,
+          latestVersion: input.version,
+          downloadCount: 0,
+          ratingAvg: 0,
+          ratingCount: 0,
+          status: "active",
+        });
+      } else {
+        // Update existing skill with new version and metadata
+        await tx
+          .update(skillsTable)
+          .set({
+            name: input.name,
+            description: input.description,
+            tags: input.tags,
+            latestVersion: input.version,
+          })
+          .where(eq(skillsTable.id, skillId));
+      }
 
-  const [versionRow] = await db
-    .select()
-    .from(skillVersionsTable)
-    .where(eq(skillVersionsTable.id, versionId))
-    .limit(1);
+      // Create version record (parent skill now guaranteed to exist)
+      await tx.insert(skillVersionsTable).values({
+        id: versionId,
+        skillId,
+        version: input.version,
+        changelog: input.changelog ?? null,
+        tarballUrl,
+        checksumSha256: sha256,
+        tarballSize,
+        minWinclawVersion: null,
+      });
 
-  const skill = skillRow as SkillRow;
-  const version = versionRow as SkillVersionRow;
+      // Fetch the final skill and version records within the transaction
+      const [skillRow] = await tx
+        .select()
+        .from(skillsTable)
+        .where(eq(skillsTable.id, skillId))
+        .limit(1);
+
+      const [versionRow] = await tx
+        .select()
+        .from(skillVersionsTable)
+        .where(eq(skillVersionsTable.id, versionId))
+        .limit(1);
+
+      return {
+        skill: skillRow as SkillRow,
+        version: versionRow as SkillVersionRow,
+      };
+    });
+
+    skill = result.skill;
+    version = result.version;
+  } catch (err) {
+    // Compensation: best-effort cleanup of the uploaded tarball
+    logger.warn(
+      { slug: input.slug, version: input.version },
+      "Transaction failed during publishSkill — attempting tarball cleanup",
+    );
+    deleteTarball(input.slug, input.version).catch((cleanupErr) => {
+      logger.error(
+        { err: cleanupErr, slug: input.slug, version: input.version },
+        "Failed to clean up tarball after transaction failure",
+      );
+    });
+    throw err;
+  }
 
   // Index in Meilisearch (non-blocking)
   indexSkill(toSearchDoc(skill)).catch((err) => {
@@ -576,64 +604,70 @@ export async function rateSkill(input: RateInput): Promise<void> {
     throw new NotFoundError("Skill");
   }
 
-  // Check if user already rated this skill
-  const existingRating = await db
-    .select({ id: skillRatingsTable.id })
-    .from(skillRatingsTable)
-    .where(
-      and(
-        eq(skillRatingsTable.skillId, input.skillId),
-        eq(skillRatingsTable.userId, input.userId),
-      ),
-    )
-    .limit(1);
+  // Wrap the upsert + average recalculation in a transaction to ensure
+  // the rating row and the aggregated counters stay consistent.
+  const updatedSkill = await db.transaction(async (tx) => {
+    // Check if user already rated this skill
+    const existingRating = await tx
+      .select({ id: skillRatingsTable.id })
+      .from(skillRatingsTable)
+      .where(
+        and(
+          eq(skillRatingsTable.skillId, input.skillId),
+          eq(skillRatingsTable.userId, input.userId),
+        ),
+      )
+      .limit(1);
 
-  if (existingRating.length > 0) {
-    // Update existing rating
-    await db
-      .update(skillRatingsTable)
-      .set({
+    if (existingRating.length > 0) {
+      // Update existing rating
+      await tx
+        .update(skillRatingsTable)
+        .set({
+          rating: input.rating,
+          review: input.review ?? null,
+        })
+        .where(eq(skillRatingsTable.id, existingRating[0].id));
+    } else {
+      // Insert new rating
+      await tx.insert(skillRatingsTable).values({
+        id: uuidv4(),
+        skillId: input.skillId,
+        userId: input.userId,
         rating: input.rating,
         review: input.review ?? null,
+      });
+    }
+
+    // Recalculate average rating
+    const [aggResult] = await tx
+      .select({
+        avg: sql<number>`AVG(${skillRatingsTable.rating})`,
+        count: sql<number>`COUNT(*)`,
       })
-      .where(eq(skillRatingsTable.id, existingRating[0].id));
-  } else {
-    // Insert new rating
-    await db.insert(skillRatingsTable).values({
-      id: uuidv4(),
-      skillId: input.skillId,
-      userId: input.userId,
-      rating: input.rating,
-      review: input.review ?? null,
-    });
-  }
+      .from(skillRatingsTable)
+      .where(eq(skillRatingsTable.skillId, input.skillId));
 
-  // Recalculate average rating
-  const [aggResult] = await db
-    .select({
-      avg: sql<number>`AVG(${skillRatingsTable.rating})`,
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(skillRatingsTable)
-    .where(eq(skillRatingsTable.skillId, input.skillId));
+    const ratingAvg = Number(aggResult?.avg ?? 0);
+    const ratingCount = Number(aggResult?.count ?? 0);
 
-  const ratingAvg = Number(aggResult?.avg ?? 0);
-  const ratingCount = Number(aggResult?.count ?? 0);
+    await tx
+      .update(skillsTable)
+      .set({
+        ratingAvg: Math.round(ratingAvg * 100) / 100,
+        ratingCount,
+      })
+      .where(eq(skillsTable.id, input.skillId));
 
-  await db
-    .update(skillsTable)
-    .set({
-      ratingAvg: Math.round(ratingAvg * 100) / 100,
-      ratingCount,
-    })
-    .where(eq(skillsTable.id, input.skillId));
+    // Fetch updated skill within the transaction for search index update
+    const [updated] = await tx
+      .select()
+      .from(skillsTable)
+      .where(eq(skillsTable.id, input.skillId))
+      .limit(1);
 
-  // Update search index with new rating data
-  const [updatedSkill] = await db
-    .select()
-    .from(skillsTable)
-    .where(eq(skillsTable.id, input.skillId))
-    .limit(1);
+    return updated;
+  });
 
   if (updatedSkill) {
     indexSkill(toSearchDoc(updatedSkill as SkillRow)).catch((err) => {

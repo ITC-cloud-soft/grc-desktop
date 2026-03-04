@@ -6,7 +6,7 @@
  */
 
 import { eq, and, sql, isNull, gt, desc } from "drizzle-orm";
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
 import pino from "pino";
@@ -31,6 +31,14 @@ const logger = pino({ name: "auth:service" });
  */
 function sha256(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+/**
+ * HMAC-SHA256 hash for verification codes.
+ * Prevents plaintext code exposure if the database is compromised.
+ */
+function hmacSha256(input: string, key: string): string {
+  return createHmac("sha256", key).update(input, "utf8").digest("hex");
 }
 
 /**
@@ -90,7 +98,7 @@ function toApiKeyInfo(row: typeof apiKeys.$inferSelect): IApiKey {
 const BCRYPT_ROUNDS = 12;
 
 /** Verification code validity period in minutes. */
-const CODE_EXPIRES_MINUTES = 10;
+const CODE_EXPIRES_MINUTES = 5;
 
 /** Maximum number of verification attempts per code. */
 const MAX_CODE_ATTEMPTS = 5;
@@ -303,6 +311,30 @@ export class AuthService implements IAuthService {
       .limit(1);
 
     if (rows.length === 0) {
+      // Check if this is a reused (already-revoked) token — potential theft
+      const revokedRows = await db
+        .select({ userId: refreshTokens.userId })
+        .from(refreshTokens)
+        .where(eq(refreshTokens.tokenHash, tokenHash))
+        .limit(1);
+
+      if (revokedRows.length > 0) {
+        // Reuse detected — revoke ALL tokens for this user (security measure)
+        logger.error(
+          { userId: revokedRows[0]!.userId },
+          "Refresh token reuse detected — revoking all user tokens",
+        );
+        await db
+          .update(refreshTokens)
+          .set({ revokedAt: sql`CURRENT_TIMESTAMP` })
+          .where(
+            and(
+              eq(refreshTokens.userId, revokedRows[0]!.userId),
+              isNull(refreshTokens.revokedAt),
+            ),
+          );
+      }
+
       logger.warn("Refresh token not found or already revoked");
       return null;
     }
@@ -325,6 +357,12 @@ export class AuthService implements IAuthService {
     const user = await this.getUserById(storedToken.userId);
     if (!user) {
       logger.error({ userId: storedToken.userId }, "Refresh token user not found");
+      return null;
+    }
+
+    // Check if user is banned
+    if (user.role === "banned") {
+      logger.warn({ userId: user.id }, "Banned user attempted token refresh");
       return null;
     }
 
@@ -371,6 +409,23 @@ export class AuthService implements IAuthService {
     logger.info("Refresh token revoked");
   }
 
+  /**
+   * Revoke all refresh tokens for a user (logout from all devices).
+   */
+  async revokeAllUserTokens(userId: string): Promise<void> {
+    const db = getDb();
+    await db
+      .update(refreshTokens)
+      .set({ revokedAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(refreshTokens.userId, userId),
+          isNull(refreshTokens.revokedAt),
+        ),
+      );
+    logger.info({ userId }, "All refresh tokens revoked");
+  }
+
   // ── API Key Resolution (for middleware) ────────
 
   /**
@@ -410,6 +465,12 @@ export class AuthService implements IAuthService {
     const user = await this.getUserById(key.userId);
     if (!user) {
       logger.error({ keyId: key.id, userId: key.userId }, "API key owner not found");
+      return null;
+    }
+
+    // Check if user is banned
+    if (user.role === "banned") {
+      logger.warn({ userId: user.id }, "Banned user attempted API key usage");
       return null;
     }
 
@@ -533,7 +594,7 @@ export class AuthService implements IAuthService {
     await db.insert(verificationCodes).values({
       id: uuidv4(),
       email: normalizedEmail,
-      code,
+      code: hmacSha256(code, this.config.jwt.privateKey),
       expiresAt,
     });
 
@@ -588,8 +649,11 @@ export class AuthService implements IAuthService {
       .set({ attempts: sql`${verificationCodes.attempts} + 1` })
       .where(eq(verificationCodes.id, record.id));
 
-    // Check if code matches
-    if (record.code !== code) {
+    // Check if code matches (timing-safe comparison to prevent timing attacks)
+    const expectedHash = hmacSha256(code, this.config.jwt.privateKey);
+    const codeMatch = record.code.length === expectedHash.length &&
+      timingSafeEqual(Buffer.from(record.code, "utf8"), Buffer.from(expectedHash, "utf8"));
+    if (!codeMatch) {
       return false;
     }
 
@@ -677,6 +741,11 @@ export class AuthService implements IAuthService {
     }
 
     const row = rows[0]!;
+
+    // Check if user is banned
+    if (row.role === "banned") {
+      throw new Error("ACCOUNT_BANNED");
+    }
 
     // Check password
     if (!row.passwordHash) {

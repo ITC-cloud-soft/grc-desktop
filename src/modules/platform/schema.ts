@@ -9,7 +9,7 @@ import {
   mysqlTable,
   char,
   varchar,
-  text,
+  mediumtext,
   timestamp,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
@@ -18,7 +18,7 @@ import { sql } from "drizzle-orm";
 
 export const platformValues = mysqlTable("platform_values", {
   id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-  content: text("content").notNull().default(""),
+  content: mediumtext("content").notNull().default(""),
   contentHash: varchar("content_hash", { length: 64 }).notNull().default(""),
   updatedBy: char("updated_by", { length: 36 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),

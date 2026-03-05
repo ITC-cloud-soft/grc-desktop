@@ -13,10 +13,7 @@ import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
 import { createAdminAuthMiddleware } from "../../shared/middleware/admin-auth.js";
-import {
-  asyncHandler,
-  BadRequestError,
-} from "../../shared/middleware/error-handler.js";
+import { asyncHandler } from "../../shared/middleware/error-handler.js";
 import { PlatformService } from "./service.js";
 
 const logger = pino({ name: "admin:platform" });

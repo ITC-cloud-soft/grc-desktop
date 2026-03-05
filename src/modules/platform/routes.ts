@@ -42,7 +42,12 @@ export async function register(app: Express, config: GrcConfig) {
 
       // ETag support: If client sends If-None-Match with the content hash,
       // respond with 304 Not Modified if nothing changed.
-      const ifNoneMatch = req.headers["if-none-match"];
+      // Strip surrounding quotes / W/ prefix that some HTTP clients add.
+      const rawIfNoneMatch = req.headers["if-none-match"];
+      const ifNoneMatch = rawIfNoneMatch
+        ?.replace(/^W\//, "")
+        .replace(/^"|"$/g, "")
+        .trim();
       if (ifNoneMatch && ifNoneMatch === values.contentHash) {
         return res.status(304).end();
       }

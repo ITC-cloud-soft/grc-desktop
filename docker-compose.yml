@@ -5,7 +5,7 @@
 #   grc-server     — Express API (all 6 modules)
 #   mysql          — MySQL 8.0 database
 #   redis          — Cache + session store
-#   minio          — S3-compatible object storage (skill tarballs)
+#   (Azure Blob Storage for skill tarballs — external service)
 #   meilisearch    — Full-text search engine
 #   nginx          — TLS termination + reverse proxy
 # ─────────────────────────────────────────────────
@@ -27,11 +27,9 @@ services:
       - PORT=3100
       - DATABASE_URL=mysql://grc:${MYSQL_PASSWORD:-grc_secret}@mysql:3306/grc-server
       - REDIS_URL=redis://redis:6379
-      - MINIO_ENDPOINT=minio
-      - MINIO_PORT=9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - MINIO_BUCKET=grc-assets
+      - AZURE_STORAGE_ACCOUNT_NAME=${AZURE_STORAGE_ACCOUNT_NAME}
+      - AZURE_STORAGE_ACCOUNT_KEY=${AZURE_STORAGE_ACCOUNT_KEY}
+      - AZURE_STORAGE_CONTAINER_NAME=${AZURE_STORAGE_CONTAINER_NAME:-skills}
       - MEILISEARCH_URL=http://meilisearch:7700
       - MEILISEARCH_KEY=${MEILISEARCH_KEY:-grc-meili-key}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
@@ -54,8 +52,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
       meilisearch:
         condition: service_healthy
     healthcheck:
@@ -107,21 +103,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # ── MinIO (S3-compatible storage) ────────────────
-  minio:
-    image: minio/minio:latest
-    container_name: grc-minio
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9001:9001"  # Console
-    environment:
-      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-
   # ── Meilisearch (Full-text search) ───────────────
   meilisearch:
     image: getmeili/meilisearch:v1.6
@@ -158,5 +139,4 @@ services:
 volumes:
   mysql_data:
   redis_data:
-  minio_data:
   meili_data:

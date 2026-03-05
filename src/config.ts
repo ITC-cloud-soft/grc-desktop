@@ -23,13 +23,10 @@ export interface GrcConfig {
     url: string;
   };
 
-  minio: {
-    endpoint: string;
-    port: number;
-    accessKey: string;
-    secretKey: string;
-    bucket: string;
-    useSSL: boolean;
+  azure: {
+    accountName: string;
+    accountKey: string;
+    containerName: string;
   };
 
   meilisearch: {
@@ -158,13 +155,10 @@ export function loadConfig(): GrcConfig {
       url: envString("REDIS_URL", "redis://localhost:6379"),
     },
 
-    minio: {
-      endpoint: envString("MINIO_ENDPOINT", "localhost"),
-      port: envInt("MINIO_PORT", 9000),
-      accessKey: envString("MINIO_ACCESS_KEY", ""),
-      secretKey: envString("MINIO_SECRET_KEY", ""),
-      bucket: envString("MINIO_BUCKET", "grc-assets"),
-      useSSL: envBool("MINIO_USE_SSL", false),
+    azure: {
+      accountName: envString("AZURE_STORAGE_ACCOUNT_NAME", ""),
+      accountKey: envString("AZURE_STORAGE_ACCOUNT_KEY", ""),
+      containerName: envString("AZURE_STORAGE_CONTAINER_NAME", "skills"),
     },
 
     meilisearch: {

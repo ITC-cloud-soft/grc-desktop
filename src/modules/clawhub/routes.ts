@@ -89,9 +89,9 @@ const recommendedQuerySchema = z.object({
 export async function register(app: Express, config: GrcConfig): Promise<void> {
   // Initialize infrastructure dependencies
   try {
-    await initStorage(config.minio);
+    await initStorage(config.azure);
   } catch (err) {
-    logger.warn({ err }, "MinIO storage initialization failed -- uploads will fail until MinIO is available");
+    logger.warn({ err }, "Azure Blob storage initialization failed -- uploads will fail until Azure is available");
   }
 
   try {

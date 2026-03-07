@@ -85,6 +85,9 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         envFingerprint: body.env_fingerprint,
         platform: body.platform,
         winclawVersion: body.winclaw_version,
+        employeeId: body.employee_id,
+        employeeName: body.employee_name,
+        employeeEmail: body.employee_email,
       });
 
       logger.debug({ nodeId: body.node_id }, "Hello received");
@@ -114,6 +117,9 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         envFingerprint: body.env_fingerprint,
         platform: body.platform,
         winclawVersion: body.winclaw_version,
+        employeeId: body.employee_id,
+        employeeName: body.employee_name,
+        employeeEmail: body.employee_email,
       });
 
       res.json({

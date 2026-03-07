@@ -63,6 +63,10 @@ export interface GrcConfig {
     telemetry: boolean;
     community: boolean;
     platform: boolean;
+    roles: boolean;
+    tasks: boolean;
+    relay: boolean;
+    strategy: boolean;
   };
 
   smtp: {
@@ -210,6 +214,10 @@ export function loadConfig(): GrcConfig {
       telemetry: envBool("GRC_MODULE_TELEMETRY", true),
       community: envBool("GRC_MODULE_COMMUNITY", false),
       platform: envBool("GRC_MODULE_PLATFORM", true),
+      roles: envBool("GRC_MODULE_ROLES", true),
+      tasks: envBool("GRC_MODULE_TASKS", true),
+      relay: envBool("GRC_MODULE_RELAY", true),
+      strategy: envBool("GRC_MODULE_STRATEGY", true),
     },
 
     admin: {

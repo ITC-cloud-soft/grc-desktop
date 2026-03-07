@@ -135,7 +135,14 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         throw new NotFoundError("User");
       }
 
-      res.json({ user: rows[0] });
+      const user = rows[0];
+      // Use JWT role if DB role is not admin (dev token / admin middleware sets role in JWT)
+      const jwtRole = req.auth?.role;
+      if (jwtRole === "admin" && user.role !== "admin") {
+        user.role = "admin";
+      }
+
+      res.json({ user });
     }),
   );
 

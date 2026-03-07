@@ -58,6 +58,9 @@ export const a2aHelloSchema = z.object({
   env_fingerprint: z.string().optional(),
   platform: platformSchema.optional(),
   winclaw_version: semverSchema.optional(),
+  employee_id: z.string().max(100).optional(),
+  employee_name: z.string().max(255).optional(),
+  employee_email: z.string().max(255).optional(),
 });
 
 export const a2aPublishSchema = z.object({

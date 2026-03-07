@@ -34,6 +34,21 @@ export function Nodes() {
     },
     { key: 'displayName', label: 'Display Name' },
     {
+      key: 'employeeId',
+      label: 'Employee ID',
+      render: (v) => v ? <span className="mono text-sm">{String(v)}</span> : <span className="text-muted">—</span>,
+    },
+    {
+      key: 'employeeName',
+      label: 'Employee',
+      render: (v) => v ? <span>{String(v)}</span> : <span className="text-muted">—</span>,
+    },
+    {
+      key: 'employeeEmail',
+      label: 'Email',
+      render: (v) => v ? <span className="text-sm">{String(v)}</span> : <span className="text-muted">—</span>,
+    },
+    {
       key: 'platform',
       label: 'Platform',
       render: (v) => {

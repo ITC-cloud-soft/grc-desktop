@@ -7,6 +7,8 @@
 
 import {
   mysqlTable,
+  mysqlEnum,
+  mediumtext,
   char,
   varchar,
   int,
@@ -36,6 +38,24 @@ export const nodesTable = mysqlTable(
     geneCount: int("gene_count").notNull().default(0),
     capsuleCount: int("capsule_count").notNull().default(0),
     envFingerprint: varchar("env_fingerprint", { length: 255 }),
+    employeeId: varchar("employee_id", { length: 100 }),
+    employeeName: varchar("employee_name", { length: 255 }),
+    employeeEmail: varchar("employee_email", { length: 255 }),
+    // ── Role assignment fields (006_nodes_role.sql) ──
+    roleId: varchar("role_id", { length: 50 }),
+    roleMode: mysqlEnum("role_mode", ["autonomous", "copilot"]),
+    configRevision: int("config_revision").notNull().default(0),
+    configAppliedRevision: int("config_applied_revision").notNull().default(0),
+    assignmentVariables: json("assignment_variables"),
+    configOverrides: json("config_overrides"),
+    resolvedAgentsMd: mediumtext("resolved_agents_md"),
+    resolvedSoulMd: mediumtext("resolved_soul_md"),
+    resolvedIdentityMd: mediumtext("resolved_identity_md"),
+    resolvedUserMd: mediumtext("resolved_user_md"),
+    resolvedToolsMd: mediumtext("resolved_tools_md"),
+    resolvedHeartbeatMd: mediumtext("resolved_heartbeat_md"),
+    resolvedBootstrapMd: mediumtext("resolved_bootstrap_md"),
+    resolvedTasksMd: mediumtext("resolved_tasks_md"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   },
@@ -43,6 +63,8 @@ export const nodesTable = mysqlTable(
     uniqueIndex("uk_node_id").on(table.nodeId),
     index("idx_user_id").on(table.userId),
     index("idx_last_heartbeat").on(table.lastHeartbeat),
+    index("idx_role_id").on(table.roleId),
+    index("idx_config_revision").on(table.configRevision),
   ],
 );
 

@@ -67,6 +67,49 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: 'Employees',
+    icon: '\u{1F465}',
+    adminOnly: true,
+    items: [
+      { label: 'Employee List', path: '/employees' },
+      { label: 'Org Chart', path: '/employees/org' },
+    ],
+  },
+  {
+    label: 'Roles',
+    icon: '\u{1F3AD}',
+    adminOnly: true,
+    items: [
+      { label: 'Role Templates', path: '/roles' },
+      { label: 'Create Role', path: '/roles/create' },
+    ],
+  },
+  {
+    label: 'Tasks',
+    icon: '\u{1F4CB}',
+    items: [
+      { label: 'Task Board', path: '/tasks' },
+      { label: 'Task Stats', path: '/tasks/stats' },
+      { label: 'Expenses', path: '/tasks/expenses', adminOnly: true },
+    ],
+  },
+  {
+    label: 'Strategy',
+    icon: '\u{1F3AF}',
+    adminOnly: true,
+    items: [
+      { label: 'Strategy', path: '/strategy' },
+    ],
+  },
+  {
+    label: 'Relay',
+    icon: '\u{1F4E8}',
+    adminOnly: true,
+    items: [
+      { label: 'Relay Log', path: '/relay' },
+    ],
+  },
+  {
     label: 'Platform',
     icon: '\u{2728}',
     items: [

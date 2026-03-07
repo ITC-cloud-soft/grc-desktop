@@ -122,6 +122,9 @@ export interface Node {
   capsuleCount: number;
   lastHeartbeat: string | null;
   capabilities: unknown;
+  employeeId: string | null;
+  employeeName: string | null;
+  employeeEmail: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -655,6 +658,501 @@ export function useUpdatePlatformValues() {
       apiClient.put('/api/v1/admin/platform/values', { content }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'platform', 'values'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Role Template types & hooks
+// ---------------------------------------------------------------------------
+
+export interface RoleTemplate {
+  id: string;
+  name: string;
+  emoji: string | null;
+  description: string | null;
+  department: string | null;
+  industry: string | null;
+  mode: 'autonomous' | 'copilot';
+  isBuiltin: boolean;
+  agentsMd: string;
+  soulMd: string;
+  identityMd: string;
+  userMd: string;
+  toolsMd: string;
+  heartbeatMd: string;
+  bootstrapMd: string;
+  tasksMd: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Employee extends Node {
+  roleId: string | null;
+  roleMode: 'autonomous' | 'copilot' | null;
+  configRevision: number;
+  configAppliedRevision: number;
+  assignmentVariables: Record<string, string> | null;
+  roleName?: string | null;
+  roleEmoji?: string | null;
+}
+
+export function useRoleTemplates(params?: {
+  page?: number;
+  page_size?: number;
+  industry?: string;
+  department?: string;
+  mode?: string;
+}) {
+  return useQuery<PaginatedResponse<RoleTemplate>>({
+    queryKey: ['admin', 'roles', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<RoleTemplate>>('/api/v1/admin/roles', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useRoleTemplate(id: string) {
+  return useQuery<{ data: RoleTemplate }>({
+    queryKey: ['admin', 'role', id],
+    queryFn: () => apiClient.get<{ data: RoleTemplate }>(`/api/v1/admin/roles/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<RoleTemplate> & { id: string }) =>
+      apiClient.post('/api/v1/admin/roles', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
+    },
+  });
+}
+
+export function useUpdateRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<RoleTemplate> }) =>
+      apiClient.put(`/api/v1/admin/roles/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'role'] });
+    },
+  });
+}
+
+export function useDeleteRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.del(`/api/v1/admin/roles/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
+    },
+  });
+}
+
+export function useCloneRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, newId, newName }: { id: string; newId: string; newName: string }) =>
+      apiClient.post(`/api/v1/admin/roles/${id}/clone`, { new_id: newId, new_name: newName }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
+    },
+  });
+}
+
+export function useEmployees(params?: { page?: number; page_size?: number }) {
+  return useQuery<PaginatedResponse<Employee>>({
+    queryKey: ['admin', 'employees', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Employee>>('/api/v1/admin/employees', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useAssignRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ nodeId, roleId, mode, variables, overrides }: {
+      nodeId: string;
+      roleId: string;
+      mode?: 'autonomous' | 'copilot';
+      variables?: Record<string, string>;
+      overrides?: Record<string, string>;
+    }) =>
+      apiClient.post(`/api/v1/admin/nodes/${nodeId}/assign-role`, { role_id: roleId, mode, variables, overrides }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'nodes'] });
+    },
+  });
+}
+
+export function useUnassignRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (nodeId: string) =>
+      apiClient.post(`/api/v1/admin/nodes/${nodeId}/unassign-role`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'nodes'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Task types & hooks
+// ---------------------------------------------------------------------------
+
+export interface Task {
+  id: string;
+  taskCode: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'draft' | 'pending' | 'in_progress' | 'blocked' | 'review' | 'approved' | 'completed' | 'cancelled';
+  assignedRoleId: string | null;
+  assignedNodeId: string | null;
+  assignedBy: string | null;
+  deadline: string | null;
+  dependsOn: string[] | null;
+  collaborators: string[] | null;
+  deliverables: string[] | null;
+  notes: string | null;
+  expenseAmount: string | null;
+  expenseCurrency: string | null;
+  expenseApproved: number | null;
+  expenseApprovedBy: string | null;
+  expenseApprovedAt: string | null;
+  resultSummary: string | null;
+  resultData: unknown;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  author: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface TaskProgressEntry {
+  id: number;
+  taskId: string;
+  actor: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  details: unknown;
+  createdAt: string;
+}
+
+export interface TaskStats {
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+  byCategory: Record<string, number>;
+  total: number;
+  completionRate: number;
+  avgCompletionDays: number;
+  pendingExpenses: number;
+}
+
+export interface TaskDetailResponse {
+  task: Task;
+  progress: TaskProgressEntry[];
+  comments: TaskComment[];
+}
+
+export function useAdminTasks(params?: {
+  page?: number;
+  page_size?: number;
+  status?: string;
+  priority?: string;
+  category?: string;
+  assigned_role_id?: string;
+}) {
+  return useQuery<PaginatedResponse<Task>>({
+    queryKey: ['admin', 'tasks', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Task>>('/api/v1/admin/tasks', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useTaskDetail(id: string) {
+  return useQuery<TaskDetailResponse>({
+    queryKey: ['admin', 'task', id],
+    queryFn: () => apiClient.get<TaskDetailResponse>(`/api/v1/admin/tasks/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useTaskStats() {
+  return useQuery<TaskStats>({
+    queryKey: ['admin', 'tasks', 'stats'],
+    queryFn: () => apiClient.get<TaskStats>('/api/v1/admin/tasks/stats'),
+  });
+}
+
+export function useExpenseQueue(params?: { page?: number; page_size?: number }) {
+  return useQuery<PaginatedResponse<Task>>({
+    queryKey: ['admin', 'tasks', 'expenses', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Task>>('/api/v1/admin/tasks/expenses', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useCreateTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Task>) =>
+      apiClient.post('/api/v1/admin/tasks', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+    },
+  });
+}
+
+export function useUpdateTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Task> }) =>
+      apiClient.put(`/api/v1/admin/tasks/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+    },
+  });
+}
+
+export function useChangeTaskStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, resultSummary }: { id: string; status: string; resultSummary?: string }) =>
+      apiClient.put(`/api/v1/admin/tasks/${id}/status`, { status, result_summary: resultSummary }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks', 'stats'] });
+    },
+  });
+}
+
+export function useAddTaskComment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, content }: { taskId: string; content: string }) =>
+      apiClient.post(`/api/v1/admin/tasks/${taskId}/comment`, { content }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+    },
+  });
+}
+
+export function useApproveExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      apiClient.post(`/api/v1/admin/tasks/${taskId}/expense/approve`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks', 'expenses'] });
+    },
+  });
+}
+
+export function useRejectExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
+      apiClient.post(`/api/v1/admin/tasks/${taskId}/expense/reject`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks', 'expenses'] });
+    },
+  });
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.del(`/api/v1/admin/tasks/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks', 'stats'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Strategy types & hooks
+// ---------------------------------------------------------------------------
+
+export interface CompanyStrategy {
+  id: string;
+  companyMission: string | null;
+  companyVision: string | null;
+  companyValues: string | null;
+  shortTermObjectives: unknown;
+  midTermObjectives: unknown;
+  longTermObjectives: unknown;
+  departmentBudgets: Record<string, unknown> | null;
+  departmentKpis: Record<string, unknown> | null;
+  strategicPriorities: unknown;
+  revision: number;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StrategyHistoryEntry {
+  id: number;
+  strategyId: string;
+  revision: number;
+  snapshot: unknown;
+  changedBy: string | null;
+  changeSummary: string | null;
+  changedFields: string[] | null;
+  createdAt: string;
+}
+
+export function useStrategy() {
+  return useQuery<{ data: CompanyStrategy }>({
+    queryKey: ['admin', 'strategy'],
+    queryFn: () => apiClient.get<{ data: CompanyStrategy }>('/api/v1/admin/strategy'),
+  });
+}
+
+export function useStrategyHistory(params?: { page?: number; page_size?: number }) {
+  return useQuery<PaginatedResponse<StrategyHistoryEntry>>({
+    queryKey: ['admin', 'strategy', 'history', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<StrategyHistoryEntry>>('/api/v1/admin/strategy/history', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useStrategyDiff(rev1: number, rev2: number) {
+  return useQuery<{ data: { rev1: number; rev2: number; snapshot1: unknown; snapshot2: unknown; changedFields: string[] } }>({
+    queryKey: ['admin', 'strategy', 'diff', rev1, rev2],
+    queryFn: () => apiClient.get(`/api/v1/admin/strategy/diff/${rev1}/${rev2}`),
+    enabled: rev1 > 0 && rev2 > 0 && rev1 !== rev2,
+  });
+}
+
+export function useUpdateStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<CompanyStrategy>) =>
+      apiClient.put('/api/v1/admin/strategy', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'strategy'] });
+    },
+  });
+}
+
+export function useDeployStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post('/api/v1/admin/strategy/deploy', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'strategy'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Relay types & hooks
+// ---------------------------------------------------------------------------
+
+export interface RelayMessage {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  messageType: string;
+  subject: string | null;
+  payload: unknown;
+  priority: string;
+  status: string;
+  deliveredAt: string | null;
+  acknowledgedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface RelayStats {
+  stats: {
+    total: number;
+    byStatus: Record<string, number>;
+    byType: Record<string, number>;
+  };
+}
+
+export function useRelayMessages(params?: {
+  page?: number;
+  page_size?: number;
+  status?: string;
+  from_node_id?: string;
+  to_node_id?: string;
+}) {
+  return useQuery<PaginatedResponse<RelayMessage>>({
+    queryKey: ['admin', 'relay', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<RelayMessage>>('/api/v1/admin/relay', params as Record<string, string | number | boolean | undefined>),
+  });
+}
+
+export function useRelayStats() {
+  return useQuery<RelayStats>({
+    queryKey: ['admin', 'relay', 'stats'],
+    queryFn: () => apiClient.get<RelayStats>('/api/v1/admin/relay/stats'),
+  });
+}
+
+export function useDeleteRelayMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.del(`/api/v1/admin/relay/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'relay'] });
+    },
+  });
+}
+
+export function useCleanupRelayMessages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params?: { before?: string; status?: string }) =>
+      apiClient.post('/api/v1/admin/relay/cleanup', params ?? {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'relay'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Personal Info (Node Profile)
+// ---------------------------------------------------------------------------
+
+export function useUpdateNodeProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ nodeId, data }: {
+      nodeId: string;
+      data: { employee_id?: string; employee_name?: string; employee_email?: string };
+    }) =>
+      apiClient.patch(`/api/v1/admin/evolution/nodes/${nodeId}/profile`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'nodes'] });
     },
   });
 }

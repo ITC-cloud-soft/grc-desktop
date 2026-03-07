@@ -80,6 +80,26 @@ export async function loadModules(
         name: "platform",
         register: m.register,
       })),
+    roles: () =>
+      import("./modules/roles/routes.js").then((m) => ({
+        name: "roles",
+        register: m.register,
+      })),
+    tasks: () =>
+      import("./modules/tasks/routes.js").then((m) => ({
+        name: "tasks",
+        register: m.register,
+      })),
+    relay: () =>
+      import("./modules/relay/routes.js").then((m) => ({
+        name: "relay",
+        register: m.register,
+      })),
+    strategy: () =>
+      import("./modules/strategy/routes.js").then((m) => ({
+        name: "strategy",
+        register: m.register,
+      })),
   };
 
   const adminModuleMap: Record<
@@ -93,6 +113,10 @@ export async function loadModules(
     telemetry: () => import("./modules/telemetry/admin-routes.js"),
     community: () => import("./modules/community/admin-routes.js"),
     platform: () => import("./modules/platform/admin-routes.js"),
+    roles: () => import("./modules/roles/admin-routes.js"),
+    tasks: () => import("./modules/tasks/admin-routes.js"),
+    relay: () => import("./modules/relay/admin-routes.js"),
+    strategy: () => import("./modules/strategy/admin-routes.js"),
   };
 
   const loaded: string[] = [];

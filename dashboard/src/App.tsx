@@ -20,6 +20,23 @@ import { Moderation } from './pages/community/Moderation';
 import { Topics } from './pages/community/Topics';
 import { PostDetail } from './pages/community/PostDetail';
 import { PlatformValues } from './pages/platform/Values';
+// Employee & Role Management
+import { Employees } from './pages/employees/Employees';
+import { OrgChart } from './pages/employees/OrgChart';
+import { RoleTemplates } from './pages/roles/RoleTemplates';
+import { RoleEditor } from './pages/roles/RoleEditor';
+import { RoleCreate } from './pages/roles/RoleCreate';
+import { RoleAssign } from './pages/roles/RoleAssign';
+// Task Management
+import { TaskBoard } from './pages/tasks/TaskBoard';
+import { TaskDetail } from './pages/tasks/TaskDetail';
+import { TaskCreate } from './pages/tasks/TaskCreate';
+import { ExpenseQueue } from './pages/tasks/ExpenseQueue';
+import { TaskStatsPage } from './pages/tasks/TaskStatsPage';
+// Strategy Management
+import { Strategy } from './pages/strategy/Strategy';
+// A2A Relay
+import { RelayLog } from './pages/relay/RelayLog';
 
 export function App() {
   return (
@@ -36,6 +53,23 @@ export function App() {
               <Route path="/evolution/nodes" element={<AdminRoute><Nodes /></AdminRoute>} />
               <Route path="/evolution/pipeline" element={<AdminRoute><Pipeline /></AdminRoute>} />
               <Route path="/community/moderation" element={<AdminRoute><Moderation /></AdminRoute>} />
+              {/* Employee & Role Management (admin) */}
+              <Route path="/employees" element={<AdminRoute><Employees /></AdminRoute>} />
+              <Route path="/employees/org" element={<AdminRoute><OrgChart /></AdminRoute>} />
+              <Route path="/roles" element={<AdminRoute><RoleTemplates /></AdminRoute>} />
+              <Route path="/roles/create" element={<AdminRoute><RoleCreate /></AdminRoute>} />
+              <Route path="/roles/:id" element={<AdminRoute><RoleEditor /></AdminRoute>} />
+              <Route path="/roles/:id/assign" element={<AdminRoute><RoleAssign /></AdminRoute>} />
+              {/* Task Management */}
+              <Route path="/tasks" element={<TaskBoard />} />
+              <Route path="/tasks/create" element={<TaskCreate />} />
+              <Route path="/tasks/stats" element={<TaskStatsPage />} />
+              <Route path="/tasks/expenses" element={<AdminRoute><ExpenseQueue /></AdminRoute>} />
+              <Route path="/tasks/:id" element={<TaskDetail />} />
+              {/* Strategy Management (admin) */}
+              <Route path="/strategy" element={<AdminRoute><Strategy /></AdminRoute>} />
+              {/* A2A Relay (admin) */}
+              <Route path="/relay" element={<AdminRoute><RelayLog /></AdminRoute>} />
               {/* Regular authenticated routes */}
               <Route path="/skills" element={<Skills />} />
               <Route path="/skills/stats" element={<SkillStats />} />

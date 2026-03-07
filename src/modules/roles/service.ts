@@ -1,0 +1,621 @@
+/**
+ * Roles Service — Role template CRUD, assignment, and config resolution
+ *
+ * Manages role templates for WinClaw agent identity configuration.
+ * Handles template variable substitution and node-level config resolution.
+ */
+
+import { v4 as uuidv4 } from "uuid";
+import { eq, desc, sql, and, like } from "drizzle-orm";
+import pino from "pino";
+import { getDb } from "../../shared/db/connection.js";
+import { roleTemplatesTable, nodesTable } from "./schema.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+} from "../../shared/middleware/error-handler.js";
+
+const logger = pino({ name: "module:roles:service" });
+
+// ── MD field names (DB column names -> camelCase mapping) ──
+
+const MD_FIELDS = [
+  "agentsMd",
+  "soulMd",
+  "identityMd",
+  "userMd",
+  "toolsMd",
+  "heartbeatMd",
+  "bootstrapMd",
+  "tasksMd",
+] as const;
+
+const MD_FILE_MAP: Record<string, (typeof MD_FIELDS)[number]> = {
+  "AGENTS.md": "agentsMd",
+  "SOUL.md": "soulMd",
+  "IDENTITY.md": "identityMd",
+  "USER.md": "userMd",
+  "TOOLS.md": "toolsMd",
+  "HEARTBEAT.md": "heartbeatMd",
+  "BOOTSTRAP.md": "bootstrapMd",
+  "TASKS.md": "tasksMd",
+};
+
+// ── Roles Service ────────────────────────────────
+
+export class RolesService {
+  /**
+   * List role templates with pagination and optional filters.
+   */
+  async listTemplates(opts: {
+    page: number;
+    limit: number;
+    industry?: string;
+    department?: string;
+    mode?: string;
+  }): Promise<{ templates: Record<string, unknown>[]; total: number }> {
+    const db = getDb();
+    const offset = (opts.page - 1) * opts.limit;
+
+    // Build where conditions
+    const conditions = [];
+    if (opts.industry) {
+      conditions.push(like(roleTemplatesTable.industry, `%${opts.industry}%`));
+    }
+    if (opts.department) {
+      conditions.push(like(roleTemplatesTable.department, `%${opts.department}%`));
+    }
+    if (opts.mode) {
+      conditions.push(eq(roleTemplatesTable.mode, opts.mode as "autonomous" | "copilot"));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [rows, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(roleTemplatesTable)
+        .where(whereClause)
+        .orderBy(desc(roleTemplatesTable.createdAt))
+        .limit(opts.limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(roleTemplatesTable)
+        .where(whereClause),
+    ]);
+
+    const total = Number(totalResult[0]?.count ?? 0);
+
+    return {
+      templates: rows as unknown as Record<string, unknown>[],
+      total,
+    };
+  }
+
+  /**
+   * Get a single role template by ID.
+   */
+  async getTemplate(id: string): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    const rows = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new NotFoundError("Role template");
+    }
+
+    return rows[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Create a new role template.
+   */
+  async createTemplate(data: {
+    id: string;
+    name: string;
+    emoji?: string;
+    description?: string;
+    department?: string;
+    industry?: string;
+    mode?: "autonomous" | "copilot";
+    isBuiltin?: number;
+    agentsMd: string;
+    soulMd: string;
+    identityMd: string;
+    userMd: string;
+    toolsMd: string;
+    heartbeatMd: string;
+    bootstrapMd: string;
+    tasksMd: string;
+  }): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    try {
+      await db.insert(roleTemplatesTable).values({
+        id: data.id,
+        name: data.name,
+        emoji: data.emoji ?? null,
+        description: data.description ?? null,
+        department: data.department ?? null,
+        industry: data.industry ?? null,
+        mode: data.mode ?? "autonomous",
+        isBuiltin: data.isBuiltin ?? 0,
+        agentsMd: data.agentsMd,
+        soulMd: data.soulMd,
+        identityMd: data.identityMd,
+        userMd: data.userMd,
+        toolsMd: data.toolsMd,
+        heartbeatMd: data.heartbeatMd,
+        bootstrapMd: data.bootstrapMd,
+        tasksMd: data.tasksMd,
+      });
+    } catch (err: unknown) {
+      const error = err as { code?: string };
+      if (error.code === "ER_DUP_ENTRY") {
+        throw new ConflictError(`Role template with id '${data.id}' already exists`);
+      }
+      throw err;
+    }
+
+    logger.info({ templateId: data.id }, "Role template created");
+
+    const created = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, data.id))
+      .limit(1);
+
+    return created[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Update an existing role template.
+   * Cannot delete builtin templates, but can update them.
+   */
+  async updateTemplate(
+    id: string,
+    data: Partial<{
+      name: string;
+      emoji: string;
+      description: string;
+      department: string;
+      industry: string;
+      mode: "autonomous" | "copilot";
+      agentsMd: string;
+      soulMd: string;
+      identityMd: string;
+      userMd: string;
+      toolsMd: string;
+      heartbeatMd: string;
+      bootstrapMd: string;
+      tasksMd: string;
+    }>,
+  ): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    // Check exists
+    const existing = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new NotFoundError("Role template");
+    }
+
+    // Build update set — only include fields that are provided
+    const updateSet: Record<string, unknown> = {};
+    if (data.name !== undefined) updateSet.name = data.name;
+    if (data.emoji !== undefined) updateSet.emoji = data.emoji;
+    if (data.description !== undefined) updateSet.description = data.description;
+    if (data.department !== undefined) updateSet.department = data.department;
+    if (data.industry !== undefined) updateSet.industry = data.industry;
+    if (data.mode !== undefined) updateSet.mode = data.mode;
+    if (data.agentsMd !== undefined) updateSet.agentsMd = data.agentsMd;
+    if (data.soulMd !== undefined) updateSet.soulMd = data.soulMd;
+    if (data.identityMd !== undefined) updateSet.identityMd = data.identityMd;
+    if (data.userMd !== undefined) updateSet.userMd = data.userMd;
+    if (data.toolsMd !== undefined) updateSet.toolsMd = data.toolsMd;
+    if (data.heartbeatMd !== undefined) updateSet.heartbeatMd = data.heartbeatMd;
+    if (data.bootstrapMd !== undefined) updateSet.bootstrapMd = data.bootstrapMd;
+    if (data.tasksMd !== undefined) updateSet.tasksMd = data.tasksMd;
+
+    if (Object.keys(updateSet).length === 0) {
+      throw new BadRequestError("No fields to update");
+    }
+
+    await db
+      .update(roleTemplatesTable)
+      .set(updateSet as typeof roleTemplatesTable.$inferInsert)
+      .where(eq(roleTemplatesTable.id, id));
+
+    logger.info({ templateId: id }, "Role template updated");
+
+    const updated = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id))
+      .limit(1);
+
+    return updated[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Delete a role template. Builtin templates cannot be deleted.
+   */
+  async deleteTemplate(id: string): Promise<void> {
+    const db = getDb();
+
+    const existing = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new NotFoundError("Role template");
+    }
+
+    if (existing[0]!.isBuiltin === 1) {
+      throw new ForbiddenError("Cannot delete a builtin role template");
+    }
+
+    await db
+      .delete(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id));
+
+    logger.info({ templateId: id }, "Role template deleted");
+  }
+
+  /**
+   * Clone a role template with a new ID and name.
+   */
+  async cloneTemplate(
+    id: string,
+    newId: string,
+    newName: string,
+  ): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    const existing = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new NotFoundError("Role template");
+    }
+
+    const source = existing[0]!;
+
+    try {
+      await db.insert(roleTemplatesTable).values({
+        id: newId,
+        name: newName,
+        emoji: source.emoji,
+        description: source.description,
+        department: source.department,
+        industry: source.industry,
+        mode: source.mode,
+        isBuiltin: 0, // clones are never builtin
+        agentsMd: source.agentsMd,
+        soulMd: source.soulMd,
+        identityMd: source.identityMd,
+        userMd: source.userMd,
+        toolsMd: source.toolsMd,
+        heartbeatMd: source.heartbeatMd,
+        bootstrapMd: source.bootstrapMd,
+        tasksMd: source.tasksMd,
+      });
+    } catch (err: unknown) {
+      const error = err as { code?: string };
+      if (error.code === "ER_DUP_ENTRY") {
+        throw new ConflictError(`Role template with id '${newId}' already exists`);
+      }
+      throw err;
+    }
+
+    logger.info({ sourceId: id, newId, newName }, "Role template cloned");
+
+    const cloned = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, newId))
+      .limit(1);
+
+    return cloned[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Assign a role to a node. Resolves template variables and stores
+   * the resolved config files on the node. Increments config_revision.
+   */
+  async assignRoleToNode(
+    nodeId: string,
+    roleId: string,
+    variables: Record<string, string>,
+    overrides?: Record<string, string>,
+  ): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    // Verify node exists
+    const nodeRows = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    if (nodeRows.length === 0) {
+      throw new NotFoundError("Node");
+    }
+
+    // Verify template exists
+    const templateRows = await db
+      .select()
+      .from(roleTemplatesTable)
+      .where(eq(roleTemplatesTable.id, roleId))
+      .limit(1);
+
+    if (templateRows.length === 0) {
+      throw new NotFoundError("Role template");
+    }
+
+    const template = templateRows[0]!;
+    const node = nodeRows[0]!;
+
+    // Resolve template variables
+    const resolved = this.resolveTemplateVariables(
+      template as unknown as Record<string, unknown>,
+      variables,
+    );
+
+    // Apply overrides if provided (override specific resolved files)
+    if (overrides) {
+      for (const [fileName, content] of Object.entries(overrides)) {
+        const fieldKey = MD_FILE_MAP[fileName];
+        if (fieldKey) {
+          resolved[fieldKey] = content;
+        }
+      }
+    }
+
+    // Get current config_revision from dedicated column, increment it
+    const currentRevision = node.configRevision ?? 0;
+    const newRevision = currentRevision + 1;
+
+    // Update node with role assignment using dedicated columns
+    await db
+      .update(nodesTable)
+      .set({
+        roleId: roleId,
+        roleMode: template.mode,
+        configRevision: newRevision,
+        assignmentVariables: variables,
+        configOverrides: overrides ?? null,
+        resolvedAgentsMd: resolved.agentsMd,
+        resolvedSoulMd: resolved.soulMd,
+        resolvedIdentityMd: resolved.identityMd,
+        resolvedUserMd: resolved.userMd,
+        resolvedToolsMd: resolved.toolsMd,
+        resolvedHeartbeatMd: resolved.heartbeatMd,
+        resolvedBootstrapMd: resolved.bootstrapMd,
+        resolvedTasksMd: resolved.tasksMd,
+      })
+      .where(eq(nodesTable.nodeId, nodeId));
+
+    logger.info(
+      { nodeId, roleId, revision: newRevision },
+      "Role assigned to node",
+    );
+
+    const updated = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    return updated[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Unassign role from a node. Clears resolved config fields.
+   */
+  async unassignRoleFromNode(nodeId: string): Promise<Record<string, unknown>> {
+    const db = getDb();
+
+    const nodeRows = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    if (nodeRows.length === 0) {
+      throw new NotFoundError("Node");
+    }
+
+    const node = nodeRows[0]!;
+    const currentRevision = node.configRevision ?? 0;
+
+    // Clear role-related dedicated columns, increment revision
+    await db
+      .update(nodesTable)
+      .set({
+        roleId: null,
+        roleMode: null,
+        configRevision: currentRevision + 1,
+        assignmentVariables: null,
+        configOverrides: null,
+        resolvedAgentsMd: null,
+        resolvedSoulMd: null,
+        resolvedIdentityMd: null,
+        resolvedUserMd: null,
+        resolvedToolsMd: null,
+        resolvedHeartbeatMd: null,
+        resolvedBootstrapMd: null,
+        resolvedTasksMd: null,
+      })
+      .where(eq(nodesTable.nodeId, nodeId));
+
+    logger.info({ nodeId }, "Role unassigned from node");
+
+    const updated = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    return updated[0] as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Get the resolved config files for a node (used by /a2a/config/pull).
+   */
+  async getNodeConfig(nodeId: string): Promise<{
+    revision: number;
+    roleId: string | null;
+    roleMode: string | null;
+    files: Record<string, string>;
+  }> {
+    const db = getDb();
+
+    const nodeRows = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    if (nodeRows.length === 0) {
+      throw new NotFoundError("Node");
+    }
+
+    const node = nodeRows[0]!;
+
+    // Map from file names to dedicated resolved_*_md columns
+    const resolvedColumnMap: Record<string, string | null> = {
+      "AGENTS.md": node.resolvedAgentsMd,
+      "SOUL.md": node.resolvedSoulMd,
+      "IDENTITY.md": node.resolvedIdentityMd,
+      "USER.md": node.resolvedUserMd,
+      "TOOLS.md": node.resolvedToolsMd,
+      "HEARTBEAT.md": node.resolvedHeartbeatMd,
+      "BOOTSTRAP.md": node.resolvedBootstrapMd,
+      "TASKS.md": node.resolvedTasksMd,
+    };
+
+    const files: Record<string, string> = {};
+    for (const [fileName, value] of Object.entries(resolvedColumnMap)) {
+      if (value) {
+        files[fileName] = value;
+      }
+    }
+
+    return {
+      revision: node.configRevision ?? 0,
+      roleId: node.roleId ?? null,
+      roleMode: node.roleMode ?? null,
+      files,
+    };
+  }
+
+  /**
+   * Update a single resolved config file on a node.
+   */
+  async updateNodeConfigFile(
+    nodeId: string,
+    fileName: string,
+    content: string,
+  ): Promise<void> {
+    const db = getDb();
+
+    const fieldKey = MD_FILE_MAP[fileName];
+    if (!fieldKey) {
+      throw new BadRequestError(
+        `Invalid config file name '${fileName}'. Valid names: ${Object.keys(MD_FILE_MAP).join(", ")}`,
+      );
+    }
+
+    const nodeRows = await db
+      .select()
+      .from(nodesTable)
+      .where(eq(nodesTable.nodeId, nodeId))
+      .limit(1);
+
+    if (nodeRows.length === 0) {
+      throw new NotFoundError("Node");
+    }
+
+    const node = nodeRows[0]!;
+    const currentRevision = node.configRevision ?? 0;
+    const newRevision = currentRevision + 1;
+
+    // Map fieldKey (camelCase) to the dedicated Drizzle column name
+    const columnMap: Record<string, keyof typeof nodesTable.$inferInsert> = {
+      agentsMd: "resolvedAgentsMd",
+      soulMd: "resolvedSoulMd",
+      identityMd: "resolvedIdentityMd",
+      userMd: "resolvedUserMd",
+      toolsMd: "resolvedToolsMd",
+      heartbeatMd: "resolvedHeartbeatMd",
+      bootstrapMd: "resolvedBootstrapMd",
+      tasksMd: "resolvedTasksMd",
+    };
+
+    const columnName = columnMap[fieldKey];
+    if (!columnName) {
+      throw new BadRequestError(`Unknown field key '${fieldKey}'`);
+    }
+
+    await db
+      .update(nodesTable)
+      .set({
+        [columnName]: content,
+        configRevision: newRevision,
+      } as Partial<typeof nodesTable.$inferInsert>)
+      .where(eq(nodesTable.nodeId, nodeId));
+
+    logger.info({ nodeId, fileName, revision: newRevision }, "Node config file updated");
+  }
+
+  /**
+   * Replace ${var} placeholders in all 8 MD fields with provided variable values.
+   *
+   * Supported variables:
+   *   ${employee_id}, ${employee_name}, ${employee_email},
+   *   ${company_name}, ${industry}, ${department},
+   *   ${annual_revenue_target}, ${fiscal_year}, ${team_size},
+   *   and any custom variables passed in the variables map.
+   */
+  resolveTemplateVariables(
+    template: Record<string, unknown>,
+    variables: Record<string, string>,
+  ): Record<string, string> {
+    const resolved: Record<string, string> = {};
+
+    for (const field of MD_FIELDS) {
+      let content = (template[field] as string) ?? "";
+
+      // Replace all ${key} patterns with values from the variables map
+      content = content.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
+        const trimmedKey = key.trim();
+        if (trimmedKey in variables) {
+          return variables[trimmedKey];
+        }
+        // Leave unresolved variables as-is for debugging visibility
+        return match;
+      });
+
+      resolved[field] = content;
+    }
+
+    return resolved;
+  }
+}

@@ -270,20 +270,31 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     "/nodes",
     requireAuth, requireAdmin,
     asyncHandler(async (req: Request, res: Response) => {
-      const query = paginationSchema.parse(req.query);
+      const query = z.object({
+        ...paginationSchema.shape,
+        node_id: z.string().optional(),
+      }).parse(req.query);
       const db = getDb();
       const offset = (query.page - 1) * query.limit;
+
+      const conditions = [];
+      if (query.node_id) {
+        conditions.push(eq(nodesTable.nodeId, query.node_id));
+      }
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
       const [rows, totalResult] = await Promise.all([
         db
           .select()
           .from(nodesTable)
+          .where(whereClause)
           .orderBy(desc(nodesTable.lastHeartbeat))
           .limit(query.limit)
           .offset(offset),
         db
           .select({ count: sql<number>`COUNT(*)` })
-          .from(nodesTable),
+          .from(nodesTable)
+          .where(whereClause),
       ]);
 
       const total = totalResult[0]?.count ?? 0;
@@ -297,6 +308,45 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           totalPages: Math.ceil(total / query.limit),
         },
       });
+    }),
+  );
+
+  // ── PATCH /nodes/:nodeId/profile — Update employee profile fields ──
+
+  const nodeProfileSchema = z.object({
+    employee_id: z.string().max(100).optional(),
+    employee_name: z.string().max(255).optional(),
+    employee_email: z.string().max(255).optional(),
+  });
+
+  router.patch(
+    "/nodes/:nodeId/profile",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const nodeId = req.params.nodeId as string;
+      const body = nodeProfileSchema.parse(req.body);
+      const db = getDb();
+
+      await db
+        .update(nodesTable)
+        .set({
+          ...(body.employee_id !== undefined && { employeeId: body.employee_id }),
+          ...(body.employee_name !== undefined && { employeeName: body.employee_name }),
+          ...(body.employee_email !== undefined && { employeeEmail: body.employee_email }),
+        })
+        .where(eq(nodesTable.nodeId, nodeId));
+
+      const updated = await db
+        .select()
+        .from(nodesTable)
+        .where(eq(nodesTable.nodeId, nodeId))
+        .limit(1);
+
+      if (!updated[0]) {
+        return res.status(404).json({ error: "Node not found" });
+      }
+
+      res.json({ ok: true, data: updated[0] });
     }),
   );
 

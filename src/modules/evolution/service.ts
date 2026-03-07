@@ -73,6 +73,9 @@ export async function upsertNode(params: {
   platform?: string;
   winclawVersion?: string;
   displayName?: string;
+  employeeId?: string;
+  employeeName?: string;
+  employeeEmail?: string;
 }): Promise<Record<string, unknown>> {
   const db = getDb();
   const now = new Date();
@@ -111,6 +114,15 @@ export async function upsertNode(params: {
         ...(params.displayName !== undefined && {
           displayName: params.displayName,
         }),
+        ...(params.employeeId !== undefined && {
+          employeeId: params.employeeId,
+        }),
+        ...(params.employeeName !== undefined && {
+          employeeName: params.employeeName,
+        }),
+        ...(params.employeeEmail !== undefined && {
+          employeeEmail: params.employeeEmail,
+        }),
       })
       .where(eq(nodesTable.nodeId, params.nodeId));
 
@@ -137,6 +149,9 @@ export async function upsertNode(params: {
       platform: params.platform ?? null,
       winclawVersion: params.winclawVersion ?? null,
       displayName: params.displayName ?? null,
+      employeeId: params.employeeId ?? null,
+      employeeName: params.employeeName ?? null,
+      employeeEmail: params.employeeEmail ?? null,
     });
   } catch (err: unknown) {
     // Handle duplicate key — another concurrent request beat us
@@ -167,6 +182,15 @@ export async function upsertNode(params: {
           }),
           ...(params.displayName !== undefined && {
             displayName: params.displayName,
+          }),
+          ...(params.employeeId !== undefined && {
+            employeeId: params.employeeId,
+          }),
+          ...(params.employeeName !== undefined && {
+            employeeName: params.employeeName,
+          }),
+          ...(params.employeeEmail !== undefined && {
+            employeeEmail: params.employeeEmail,
           }),
         })
         .where(eq(nodesTable.nodeId, params.nodeId));

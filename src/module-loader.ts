@@ -110,6 +110,11 @@ export async function loadModules(
         name: "meetings",
         register: m.register,
       })),
+    "model-keys": () =>
+      import("./modules/model-keys/routes.js").then((m) => ({
+        name: "model-keys",
+        register: m.register,
+      })),
   };
 
   const adminModuleMap: Record<
@@ -129,6 +134,7 @@ export async function loadModules(
     strategy: () => import("./modules/strategy/admin-routes.js"),
     "a2a-gateway": () => import("./modules/a2a-gateway/admin-routes.js"),
     meetings: () => import("./modules/meetings/admin-routes.js"),
+    "model-keys": () => import("./modules/model-keys/admin-routes.js"),
   };
 
   const loaded: string[] = [];

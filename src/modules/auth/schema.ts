@@ -92,7 +92,7 @@ export const verificationCodes = mysqlTable(
       .notNull()
       .$defaultFn(() => crypto.randomUUID()),
     email: varchar("email", { length: 255 }).notNull(),
-    code: varchar("code", { length: 6 }).notNull(),
+    code: varchar("code", { length: 64 }).notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     usedAt: timestamp("used_at"),
     attempts: int("attempts").notNull().default(0),

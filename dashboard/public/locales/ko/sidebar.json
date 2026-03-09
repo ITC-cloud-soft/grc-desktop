@@ -26,6 +26,8 @@
   "items": {
     "users": "사용자",
     "apiKeys": "API 키",
+    "modelKeys": "모델 키",
+    "keyDistribute": "키 배포",
     "skillList": "스킬 목록",
     "skillStats": "스킬 통계",
     "assets": "에셋",

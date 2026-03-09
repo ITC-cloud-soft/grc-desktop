@@ -26,6 +26,8 @@
   "items": {
     "users": "用户",
     "apiKeys": "API 密钥",
+    "modelKeys": "模型密钥",
+    "keyDistribute": "密钥分发",
     "skillList": "技能列表",
     "skillStats": "技能统计",
     "assets": "资产",

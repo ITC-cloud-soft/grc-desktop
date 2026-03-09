@@ -1,0 +1,68 @@
+{
+  "title": "AI 모델 키",
+  "subtitle": "AI 모델 API 키 관리",
+  "tabs": { "primary": "주요 업무 키", "auxiliary": "보조 업무 키" },
+  "table": {
+    "name": "이름",
+    "provider": "제공자",
+    "model": "모델명",
+    "status": "상태",
+    "updated": "수정일",
+    "actions": "작업"
+  },
+  "status": { "active": "활성", "inactive": "비활성" },
+  "addKey": "키 추가",
+  "editKey": "키 편집",
+  "form": {
+    "category": "카테고리",
+    "primary": "주요 업무 키",
+    "auxiliary": "보조 업무 키",
+    "name": "이름",
+    "namePlaceholder": "예: 프로덕션 OpenAI",
+    "provider": "제공자",
+    "selectProvider": "제공자 선택",
+    "model": "모델명",
+    "selectModel": "모델 선택",
+    "customModel": "모델명 입력",
+    "apiKey": "API 키",
+    "apiKeyPlaceholder": "sk-...",
+    "baseUrl": "기본 URL (선택)",
+    "baseUrlPlaceholder": "https://api.openai.com/v1",
+    "notes": "메모",
+    "notesPlaceholder": "선택적 메모...",
+    "active": "활성"
+  },
+  "save": "저장",
+  "cancel": "취소",
+  "saving": "저장 중...",
+  "delete": {
+    "title": "키 삭제",
+    "confirm": "키 \"{{name}}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "button": "삭제",
+    "deleting": "삭제 중..."
+  },
+  "noKeys": "키가 없습니다. 첫 번째 키를 추가하세요.",
+  "distribute": {
+    "title": "키 배포",
+    "subtitle": "노드에 주요 업무 키와 보조 업무 키를 할당",
+    "search": "노드 검색...",
+    "primaryKey": "주요 업무 키",
+    "auxiliaryKey": "보조 업무 키",
+    "assignBtn": "키 할당",
+    "manageBtn": "키 관리",
+    "updateBtn": "업데이트",
+    "unbindBtn": "해제",
+    "noneOption": "(없음)",
+    "assigned": "할당됨",
+    "unassigned": "미할당",
+    "assignModal": {
+      "title": "키 할당 — {{name}}",
+      "nodeId": "노드: {{id}}",
+      "assign": "할당",
+      "update": "업데이트",
+      "unbind": "전체 해제",
+      "cancel": "취소"
+    },
+    "confirmUnbind": "이 노드의 모든 키 할당을 해제하시겠습니까?"
+  }
+}

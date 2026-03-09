@@ -1,0 +1,68 @@
+{
+  "title": "AI模型密钥",
+  "subtitle": "管理AI模型API密钥",
+  "tabs": { "primary": "主业务密钥", "auxiliary": "辅助业务密钥" },
+  "table": {
+    "name": "名称",
+    "provider": "提供商",
+    "model": "模型名称",
+    "status": "状态",
+    "updated": "更新日期",
+    "actions": "操作"
+  },
+  "status": { "active": "有效", "inactive": "无效" },
+  "addKey": "添加密钥",
+  "editKey": "编辑密钥",
+  "form": {
+    "category": "类别",
+    "primary": "主业务密钥",
+    "auxiliary": "辅助业务密钥",
+    "name": "名称",
+    "namePlaceholder": "例: 生产环境 OpenAI",
+    "provider": "提供商",
+    "selectProvider": "选择提供商",
+    "model": "模型名称",
+    "selectModel": "选择模型",
+    "customModel": "输入模型名称",
+    "apiKey": "API密钥",
+    "apiKeyPlaceholder": "sk-...",
+    "baseUrl": "基础URL (可选)",
+    "baseUrlPlaceholder": "https://api.openai.com/v1",
+    "notes": "备注",
+    "notesPlaceholder": "可选备注...",
+    "active": "有效"
+  },
+  "save": "保存",
+  "cancel": "取消",
+  "saving": "保存中...",
+  "delete": {
+    "title": "删除密钥",
+    "confirm": "确定删除密钥 \"{{name}}\"？此操作不可撤销。",
+    "button": "删除",
+    "deleting": "删除中..."
+  },
+  "noKeys": "暂无密钥，请添加第一个密钥。",
+  "distribute": {
+    "title": "密钥分发",
+    "subtitle": "为节点分配主业务密钥和辅助业务密钥",
+    "search": "搜索节点...",
+    "primaryKey": "主业务密钥",
+    "auxiliaryKey": "辅助业务密钥",
+    "assignBtn": "分配密钥",
+    "manageBtn": "管理密钥",
+    "updateBtn": "更新",
+    "unbindBtn": "解绑",
+    "noneOption": "(无)",
+    "assigned": "已分配",
+    "unassigned": "未分配",
+    "assignModal": {
+      "title": "分配密钥 — {{name}}",
+      "nodeId": "节点: {{id}}",
+      "assign": "分配",
+      "update": "更新",
+      "unbind": "解除全部",
+      "cancel": "取消"
+    },
+    "confirmUnbind": "确定解除此节点的所有密钥分配？"
+  }
+}

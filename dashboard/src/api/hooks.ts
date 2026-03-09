@@ -125,6 +125,8 @@ export interface Node {
   employeeId: string | null;
   employeeName: string | null;
   employeeEmail: string | null;
+  primaryKeyId: string | null;
+  auxiliaryKeyId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1434,5 +1436,132 @@ export function useUpdateNodeProfile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'nodes'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// AI Model Keys
+// ---------------------------------------------------------------------------
+
+export interface ModelKey {
+  id: string;
+  category: 'primary' | 'auxiliary';
+  name: string;
+  provider: string;
+  modelName: string;
+  apiKeyPrefix: string;
+  baseUrl: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelKeyCreateInput {
+  category: 'primary' | 'auxiliary';
+  name: string;
+  provider: string;
+  model_name: string;
+  api_key: string;
+  base_url?: string;
+  notes?: string;
+}
+
+export interface ModelKeyUpdateInput {
+  name?: string;
+  provider?: string;
+  model_name?: string;
+  api_key?: string;
+  base_url?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+}
+
+export interface NodeKeyAssignment {
+  nodeId: string;
+  primaryKeyId: string | null;
+  auxiliaryKeyId: string | null;
+  primaryKey: { id: string; name: string; provider: string; modelName: string; isActive: boolean } | null;
+  auxiliaryKey: { id: string; name: string; provider: string; modelName: string; isActive: boolean } | null;
+}
+
+export function useModelKeys(category?: string, provider?: string) {
+  return useQuery<{ keys: ModelKey[]; total: number }>({
+    queryKey: ['model-keys', category, provider],
+    queryFn: () => apiClient.get('/api/v1/admin/model-keys', { category, provider }),
+  });
+}
+
+export function useModelKey(id: string) {
+  return useQuery<{ key: ModelKey }>({
+    queryKey: ['model-keys', id],
+    queryFn: () => apiClient.get(`/api/v1/admin/model-keys/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateModelKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ModelKeyCreateInput) =>
+      apiClient.post('/api/v1/admin/model-keys', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['model-keys'] }),
+  });
+}
+
+export function useUpdateModelKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: ModelKeyUpdateInput }) =>
+      apiClient.put(`/api/v1/admin/model-keys/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['model-keys'] }),
+  });
+}
+
+export function useDeleteModelKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.del(`/api/v1/admin/model-keys/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['model-keys'] }),
+  });
+}
+
+export function useAssignKeysToNode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ nodeId, primaryKeyId, auxiliaryKeyId }: {
+      nodeId: string;
+      primaryKeyId?: string | null;
+      auxiliaryKeyId?: string | null;
+    }) => apiClient.post(`/api/v1/admin/nodes/${nodeId}/assign-keys`, {
+      primary_key_id: primaryKeyId,
+      auxiliary_key_id: auxiliaryKeyId,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['node-keys'] });
+    },
+  });
+}
+
+export function useUnassignKeysFromNode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (nodeId: string) =>
+      apiClient.post(`/api/v1/admin/nodes/${nodeId}/unassign-keys`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['node-keys'] });
+    },
+  });
+}
+
+export function useNodeAssignedKeys(nodeId: string) {
+  return useQuery<NodeKeyAssignment>({
+    queryKey: ['node-keys', nodeId],
+    queryFn: () => apiClient.get(`/api/v1/admin/nodes/${nodeId}/assigned-keys`),
+    enabled: !!nodeId,
   });
 }

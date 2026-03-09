@@ -56,6 +56,10 @@ export const nodesTable = mysqlTable(
     resolvedHeartbeatMd: mediumtext("resolved_heartbeat_md"),
     resolvedBootstrapMd: mediumtext("resolved_bootstrap_md"),
     resolvedTasksMd: mediumtext("resolved_tasks_md"),
+    // ── Key assignment fields (010_ai_model_keys.sql) ──
+    primaryKeyId: char("primary_key_id", { length: 36 }),
+    auxiliaryKeyId: char("auxiliary_key_id", { length: 36 }),
+    keyConfigJson: json("key_config_json"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   },

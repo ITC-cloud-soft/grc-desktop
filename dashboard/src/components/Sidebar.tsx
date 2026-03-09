@@ -28,6 +28,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { labelKey: 'users', path: '/manage/users' },
       { labelKey: 'apiKeys', path: '/manage/apikeys' },
+      { labelKey: 'modelKeys', path: '/manage/model-keys' },
+      { labelKey: 'keyDistribute', path: '/manage/model-keys/distribute' },
     ],
   },
   {

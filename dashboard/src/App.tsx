@@ -6,6 +6,8 @@ import { UserProvider } from './context/UserContext';
 import { Overview } from './pages/Overview';
 import { Users } from './pages/auth/Users';
 import { ApiKeys } from './pages/auth/ApiKeys';
+import { ModelKeys } from './pages/auth/ModelKeys';
+import { ModelKeyDistribute } from './pages/auth/ModelKeyDistribute';
 import { Skills } from './pages/skills/Skills';
 import { SkillStats } from './pages/skills/SkillStats';
 import { Assets } from './pages/evolution/Assets';
@@ -61,6 +63,8 @@ export function App() {
               {/* Admin-only routes */}
               <Route path="/manage/users" element={<AdminRoute><Users /></AdminRoute>} />
               <Route path="/manage/apikeys" element={<AdminRoute><ApiKeys /></AdminRoute>} />
+              <Route path="/manage/model-keys" element={<AdminRoute><ModelKeys /></AdminRoute>} />
+              <Route path="/manage/model-keys/distribute" element={<AdminRoute><ModelKeyDistribute /></AdminRoute>} />
               <Route path="/evolution/nodes" element={<AdminRoute><Nodes /></AdminRoute>} />
               <Route path="/evolution/pipeline" element={<AdminRoute><Pipeline /></AdminRoute>} />
               <Route path="/community/moderation" element={<AdminRoute><Moderation /></AdminRoute>} />

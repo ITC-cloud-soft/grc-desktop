@@ -26,6 +26,8 @@
   "items": {
     "users": "Users",
     "apiKeys": "API Keys",
+    "modelKeys": "Model Keys",
+    "keyDistribute": "Key Distribution",
     "skillList": "Skill List",
     "skillStats": "Skill Stats",
     "assets": "Assets",

@@ -484,6 +484,10 @@ export class RolesService {
     roleId: string | null;
     roleMode: string | null;
     files: Record<string, string>;
+    key_config: {
+      primary: { provider: string; model: string; apiKey: string; baseUrl?: string } | null;
+      auxiliary: { provider: string; model: string; apiKey: string; baseUrl?: string } | null;
+    } | null;
   }> {
     const db = getDb();
 
@@ -518,11 +522,28 @@ export class RolesService {
       }
     }
 
+    // Parse key_config_json (stored as JSON on node)
+    let keyConfig = null;
+    if (node.keyConfigJson) {
+      try {
+        keyConfig =
+          typeof node.keyConfigJson === "string"
+            ? JSON.parse(node.keyConfigJson)
+            : node.keyConfigJson;
+      } catch {
+        // ignore parse errors
+      }
+    }
+
     return {
       revision: node.configRevision ?? 0,
       roleId: node.roleId ?? null,
       roleMode: node.roleMode ?? null,
       files,
+      key_config: keyConfig as {
+        primary: { provider: string; model: string; apiKey: string; baseUrl?: string } | null;
+        auxiliary: { provider: string; model: string; apiKey: string; baseUrl?: string } | null;
+      } | null,
     };
   }
 

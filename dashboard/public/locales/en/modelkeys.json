@@ -1,0 +1,68 @@
+{
+  "title": "AI Model Keys",
+  "subtitle": "Manage AI model API keys for LLM providers",
+  "tabs": { "primary": "Primary Keys", "auxiliary": "Auxiliary Keys" },
+  "table": {
+    "name": "Name",
+    "provider": "Provider",
+    "model": "Model",
+    "status": "Status",
+    "updated": "Updated",
+    "actions": "Actions"
+  },
+  "status": { "active": "Active", "inactive": "Inactive" },
+  "addKey": "Add Key",
+  "editKey": "Edit Key",
+  "form": {
+    "category": "Category",
+    "primary": "Primary",
+    "auxiliary": "Auxiliary",
+    "name": "Name",
+    "namePlaceholder": "e.g. Production OpenAI",
+    "provider": "Provider",
+    "selectProvider": "Select provider",
+    "model": "Model Name",
+    "selectModel": "Select model",
+    "customModel": "Enter model name",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "sk-...",
+    "baseUrl": "Base URL (optional)",
+    "baseUrlPlaceholder": "https://api.openai.com/v1",
+    "notes": "Notes",
+    "notesPlaceholder": "Optional notes...",
+    "active": "Active"
+  },
+  "save": "Save",
+  "cancel": "Cancel",
+  "saving": "Saving...",
+  "delete": {
+    "title": "Delete Key",
+    "confirm": "Are you sure you want to delete key \"{{name}}\"? This cannot be undone.",
+    "button": "Delete",
+    "deleting": "Deleting..."
+  },
+  "noKeys": "No keys found. Add your first key above.",
+  "distribute": {
+    "title": "Key Distribution",
+    "subtitle": "Assign primary and auxiliary keys to nodes",
+    "search": "Search nodes...",
+    "primaryKey": "Primary Key",
+    "auxiliaryKey": "Auxiliary Key",
+    "assignBtn": "Assign Keys",
+    "manageBtn": "Manage Keys",
+    "updateBtn": "Update",
+    "unbindBtn": "Unbind",
+    "noneOption": "(None)",
+    "assigned": "Assigned",
+    "unassigned": "Not assigned",
+    "assignModal": {
+      "title": "Assign Keys — {{name}}",
+      "nodeId": "Node: {{id}}",
+      "assign": "Assign",
+      "update": "Update",
+      "unbind": "Unbind All",
+      "cancel": "Cancel"
+    },
+    "confirmUnbind": "Remove all key assignments from this node?"
+  }
+}

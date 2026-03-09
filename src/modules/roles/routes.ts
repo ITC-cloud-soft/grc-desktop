@@ -89,6 +89,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         role_id: nodeConfig.roleId,
         role_mode: nodeConfig.roleMode,
         files: nodeConfig.files,
+        key_config: nodeConfig.key_config,
       });
     }),
   );

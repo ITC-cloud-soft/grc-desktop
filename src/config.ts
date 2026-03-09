@@ -69,6 +69,7 @@ export interface GrcConfig {
     strategy: boolean;
     "a2a-gateway": boolean;
     meetings: boolean;
+    "model-keys": boolean;
   };
 
   smtp: {
@@ -153,7 +154,7 @@ export function loadConfig(): GrcConfig {
             "FATAL: DATABASE_URL must be set in production.",
           );
         }
-        return url || "mysql://root:root@localhost:3306/grc-server-dev";
+        return url || "mysql://root:Admin123@13.78.81.86:18306/grc-server";
       })(),
     },
 
@@ -222,6 +223,7 @@ export function loadConfig(): GrcConfig {
       strategy: envBool("GRC_MODULE_STRATEGY", true),
       "a2a-gateway": envBool("GRC_MODULE_A2A_GATEWAY", true),
       meetings: envBool("GRC_MODULE_MEETINGS", true),
+      "model-keys": envBool("GRC_MODULE_MODEL_KEYS", true),
     },
 
     admin: {

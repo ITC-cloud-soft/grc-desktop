@@ -1,7 +1,7 @@
 {
-  "title": "AIモデル密鍵",
-  "subtitle": "AIモデルAPI密鍵を管理",
-  "tabs": { "primary": "主業務密鍵", "auxiliary": "補助業務密鍵" },
+  "title": "AIモデルキー",
+  "subtitle": "AIモデルAPIキーを管理",
+  "tabs": { "primary": "主業務キー", "auxiliary": "補助業務キー" },
   "table": {
     "name": "名称",
     "provider": "プロバイダ",
@@ -11,12 +11,12 @@
     "actions": "操作"
   },
   "status": { "active": "有効", "inactive": "無効" },
-  "addKey": "密鍵を追加",
-  "editKey": "密鍵を編集",
+  "addKey": "キーを追加",
+  "editKey": "キーを編集",
   "form": {
     "category": "カテゴリ",
-    "primary": "主業務密鍵",
-    "auxiliary": "補助業務密鍵",
+    "primary": "主業務キー",
+    "auxiliary": "補助業務キー",
     "name": "名称",
     "namePlaceholder": "例: 本番用 OpenAI",
     "provider": "プロバイダ",
@@ -24,7 +24,7 @@
     "model": "モデル名",
     "selectModel": "モデルを選択",
     "customModel": "モデル名を入力",
-    "apiKey": "API密鍵",
+    "apiKey": "APIキー",
     "apiKeyPlaceholder": "sk-...",
     "baseUrl": "ベースURL（任意）",
     "baseUrlPlaceholder": "https://api.openai.com/v1",
@@ -36,33 +36,33 @@
   "cancel": "キャンセル",
   "saving": "保存中...",
   "delete": {
-    "title": "密鍵を削除",
-    "confirm": "密鍵「{{name}}」を削除しますか？この操作は取り消せません。",
+    "title": "キーを削除",
+    "confirm": "キー「{{name}}」を削除しますか？この操作は取り消せません。",
     "button": "削除",
     "deleting": "削除中..."
   },
-  "noKeys": "密鍵がありません。最初の密鍵を追加してください。",
+  "noKeys": "キーがありません。最初のキーを追加してください。",
   "distribute": {
-    "title": "密鍵配布",
-    "subtitle": "ノードに主業務密鍵と補助業務密鍵を割り当て",
+    "title": "キー配布",
+    "subtitle": "ノードに主業務キーと補助業務キーを割り当て",
     "search": "ノードを検索...",
-    "primaryKey": "主業務密鍵",
-    "auxiliaryKey": "補助業務密鍵",
-    "assignBtn": "密鍵を割当",
-    "manageBtn": "密鍵を管理",
+    "primaryKey": "主業務キー",
+    "auxiliaryKey": "補助業務キー",
+    "assignBtn": "キーを割当",
+    "manageBtn": "キーを管理",
     "updateBtn": "更新",
     "unbindBtn": "解除",
     "noneOption": "（なし）",
     "assigned": "割当済",
     "unassigned": "未割当",
     "assignModal": {
-      "title": "密鍵割当 — {{name}}",
+      "title": "キー割当 — {{name}}",
       "nodeId": "ノード: {{id}}",
       "assign": "割当",
       "update": "更新",
       "unbind": "全解除",
       "cancel": "キャンセル"
     },
-    "confirmUnbind": "このノードの密鍵割当をすべて解除しますか？"
+    "confirmUnbind": "このノードのキー割当をすべて解除しますか？"
   }
 }

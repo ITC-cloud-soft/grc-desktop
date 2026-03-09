@@ -26,8 +26,8 @@
   "items": {
     "users": "ユーザー",
     "apiKeys": "APIキー",
-    "modelKeys": "モデル密鍵",
-    "keyDistribute": "密鍵配布",
+    "modelKeys": "モデルキー",
+    "keyDistribute": "キー配布",
     "skillList": "スキル一覧",
     "skillStats": "スキル統計",
     "assets": "アセット",

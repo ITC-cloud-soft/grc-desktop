@@ -48,7 +48,7 @@ export function ModelKeyDistribute() {
       {/* Search Bar */}
       <div className="search-bar" style={{ marginBottom: 20 }}>
         <input
-          className="form-input"
+          className="input"
           placeholder={t('distribute.search')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -239,52 +239,54 @@ function AssignModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h3>{t('distribute.assignModal.title', { name: displayName })}</h3>
-        <p className="text-muted" style={{ fontSize: 13 }}>
-          {t('distribute.assignModal.nodeId', { id: employee.nodeId?.substring(0, 16) })}
-        </p>
-
-        {/* Primary Key Selection */}
-        <div className="form-group">
-          <label>{t('distribute.primaryKey')}</label>
-          <select
-            className="form-input"
-            value={selectedPrimary}
-            onChange={(e) => setSelectedPrimary(e.target.value)}
-          >
-            <option value="">{t('distribute.noneOption')}</option>
-            {primaryKeys
-              .filter((k) => k.isActive)
-              .map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name} ({k.provider}/{k.modelName})
-                </option>
-              ))}
-          </select>
+        <div className="modal-content-header">
+          <h3>{t('distribute.assignModal.title', { name: displayName })}</h3>
+          <p>{t('distribute.assignModal.nodeId', { id: employee.nodeId?.substring(0, 16) })}</p>
         </div>
 
-        {/* Auxiliary Key Selection */}
-        <div className="form-group">
-          <label>{t('distribute.auxiliaryKey')}</label>
-          <select
-            className="form-input"
-            value={selectedAux}
-            onChange={(e) => setSelectedAux(e.target.value)}
-          >
-            <option value="">{t('distribute.noneOption')}</option>
-            {auxiliaryKeys
-              .filter((k) => k.isActive)
-              .map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name} ({k.provider}/{k.modelName})
-                </option>
-              ))}
-          </select>
+        <div className="modal-content-body">
+          {/* Primary Key Selection */}
+          <div className="form-group">
+            <label className="form-label">{t('distribute.primaryKey')}</label>
+            <select
+              className="select"
+              value={selectedPrimary}
+              onChange={(e) => setSelectedPrimary(e.target.value)}
+            >
+              <option value="">{t('distribute.noneOption')}</option>
+              {primaryKeys
+                .filter((k) => k.isActive)
+                .map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name} ({k.provider}/{k.modelName})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Auxiliary Key Selection */}
+          <div className="form-group">
+            <label className="form-label">{t('distribute.auxiliaryKey')}</label>
+            <select
+              className="select"
+              value={selectedAux}
+              onChange={(e) => setSelectedAux(e.target.value)}
+            >
+              <option value="">{t('distribute.noneOption')}</option>
+              {auxiliaryKeys
+                .filter((k) => k.isActive)
+                .map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name} ({k.provider}/{k.modelName})
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="modal-actions">
-          <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>
+        {/* Footer Actions */}
+        <div className="modal-content-footer">
+          <button className="btn btn-default" onClick={onClose} disabled={isSaving}>
             {t('distribute.assignModal.cancel')}
           </button>
           {hasExisting && (

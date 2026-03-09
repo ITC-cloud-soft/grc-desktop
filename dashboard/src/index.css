@@ -765,6 +765,15 @@ input, select, textarea {
 .form-group {
   display: flex;
   flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
 }
 
 .form-group-full {
@@ -886,10 +895,10 @@ input, select, textarea {
 
 /* Direct modal content pattern (used by inline modals) */
 .modal-content {
-  background: #ffffff;
+  background: var(--color-content-bg);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: 24px;
   width: 100%;
   max-width: 520px;
   max-height: 90vh;
@@ -904,12 +913,42 @@ input, select, textarea {
   max-width: 400px;
 }
 
+.modal-content .modal-content-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-content .modal-content-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.modal-content .modal-content-header p {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 4px 0 0;
+}
+
+.modal-content .modal-content-body {
+  padding: 20px 24px;
+}
+
+.modal-content .modal-content-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Legacy: simple action row inside modal */
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-  padding-top: 16px;
+  gap: 8px;
+  padding: 16px 24px;
   border-top: 1px solid var(--color-border);
 }
 

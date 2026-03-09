@@ -269,142 +269,149 @@ function KeyFormModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-lg" onClick={(e) => e.stopPropagation()}>
-        <h3>{isEdit ? t('editKey') : t('addKey')}</h3>
+        <div className="modal-content-header">
+          <h3>{isEdit ? t('editKey') : t('addKey')}</h3>
+        </div>
         <form onSubmit={handleSubmit}>
-          {/* Category */}
-          {!isEdit && (
-            <div className="form-group">
-              <label>{t('form.category')}</label>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <label className="radio-label">
+          <div className="modal-content-body">
+            {/* Category */}
+            {!isEdit && (
+              <div className="form-group">
+                <label className="form-label">{t('form.category')}</label>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <label className="checkbox-label">
+                    <input
+                      type="radio"
+                      name="category"
+                      checked={category === 'primary'}
+                      onChange={() => setCategory('primary')}
+                    />
+                    {t('form.primary')}
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="radio"
+                      name="category"
+                      checked={category === 'auxiliary'}
+                      onChange={() => setCategory('auxiliary')}
+                    />
+                    {t('form.auxiliary')}
+                  </label>
+                </div>
+              </div>
+            )}
+
+            <div className="form-grid">
+              {/* Name */}
+              <div className="form-group">
+                <label className="form-label">{t('form.name')} <span className="text-danger">*</span></label>
+                <input
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('form.namePlaceholder')}
+                  required
+                />
+              </div>
+
+              {/* Provider */}
+              <div className="form-group">
+                <label className="form-label">{t('form.provider')} <span className="text-danger">*</span></label>
+                <select
+                  className="select"
+                  value={provider}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  required
+                >
+                  <option value="">{t('form.selectProvider')}</option>
+                  {PROVIDERS.map((p) => (
+                    <option key={p} value={p}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Model Name */}
+              <div className="form-group">
+                <label className="form-label">{t('form.model')} <span className="text-danger">*</span></label>
+                {isCustomProvider || models.length === 0 ? (
                   <input
-                    type="radio"
-                    name="category"
-                    checked={category === 'primary'}
-                    onChange={() => setCategory('primary')}
-                  />{' '}
-                  {t('form.primary')}
-                </label>
-                <label className="radio-label">
+                    className="input"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder={t('form.customModel')}
+                    required
+                  />
+                ) : (
+                  <select
+                    className="select"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    required
+                  >
+                    <option value="">{t('form.selectModel')}</option>
+                    {models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* API Key */}
+              <div className="form-group">
+                <label className="form-label">{t('form.apiKey')}{isEdit && ' (leave empty to keep current)'}</label>
+                <div style={{ position: 'relative' }}>
                   <input
-                    type="radio"
-                    name="category"
-                    checked={category === 'auxiliary'}
-                    onChange={() => setCategory('auxiliary')}
-                  />{' '}
-                  {t('form.auxiliary')}
-                </label>
+                    className="input"
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={t('form.apiKeyPlaceholder')}
+                    required={!isEdit}
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}
+                    onClick={() => setShowKey(!showKey)}
+                  >
+                    {showKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Name */}
-          <div className="form-group">
-            <label>{t('form.name')}</label>
-            <input
-              className="form-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('form.namePlaceholder')}
-              required
-            />
-          </div>
-
-          {/* Provider */}
-          <div className="form-group">
-            <label>{t('form.provider')}</label>
-            <select
-              className="form-input"
-              value={provider}
-              onChange={(e) => handleProviderChange(e.target.value)}
-              required
-            >
-              <option value="">{t('form.selectProvider')}</option>
-              {PROVIDERS.map((p) => (
-                <option key={p} value={p}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Model Name */}
-          <div className="form-group">
-            <label>{t('form.model')}</label>
-            {isCustomProvider || models.length === 0 ? (
+            {/* Base URL - full width */}
+            <div className="form-group">
+              <label className="form-label">{t('form.baseUrl')}</label>
               <input
-                className="form-input"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                placeholder={t('form.customModel')}
-                required
+                className="input"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder={t('form.baseUrlPlaceholder')}
               />
-            ) : (
-              <select
-                className="form-input"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                required
-              >
-                <option value="">{t('form.selectModel')}</option>
-                {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+            </div>
 
-          {/* API Key */}
-          <div className="form-group">
-            <label>{t('form.apiKey')}{isEdit && ' (leave empty to keep current)'}</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                className="form-input"
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={t('form.apiKeyPlaceholder')}
-                required={!isEdit}
+            {/* Notes - full width */}
+            <div className="form-group">
+              <label className="form-label">{t('form.notes')}</label>
+              <textarea
+                className="textarea"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t('form.notesPlaceholder')}
+                rows={3}
               />
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ position: 'absolute', right: 8, top: 6 }}
-                onClick={() => setShowKey(!showKey)}
-              >
-                {showKey ? '🙈' : '👁️'}
-              </button>
             </div>
           </div>
 
-          {/* Base URL */}
-          <div className="form-group">
-            <label>{t('form.baseUrl')}</label>
-            <input
-              className="form-input"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder={t('form.baseUrlPlaceholder')}
-            />
-          </div>
-
-          {/* Notes */}
-          <div className="form-group">
-            <label>{t('form.notes')}</label>
-            <textarea
-              className="form-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={t('form.notesPlaceholder')}
-              rows={2}
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
+          {/* Footer Actions */}
+          <div className="modal-content-footer">
+            <button type="button" className="btn btn-default" onClick={onClose}>
               {t('cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={saving}>

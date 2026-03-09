@@ -5,7 +5,6 @@ import { AdminRoute } from './components/AdminRoute';
 import { UserProvider } from './context/UserContext';
 import { Overview } from './pages/Overview';
 import { Users } from './pages/auth/Users';
-import { ApiKeys } from './pages/auth/ApiKeys';
 import { ModelKeys } from './pages/auth/ModelKeys';
 import { ModelKeyDistribute } from './pages/auth/ModelKeyDistribute';
 import { Skills } from './pages/skills/Skills';
@@ -62,7 +61,6 @@ export function App() {
               <Route path="/" element={<Overview />} />
               {/* Admin-only routes */}
               <Route path="/manage/users" element={<AdminRoute><Users /></AdminRoute>} />
-              <Route path="/manage/apikeys" element={<AdminRoute><ApiKeys /></AdminRoute>} />
               <Route path="/manage/model-keys" element={<AdminRoute><ModelKeys /></AdminRoute>} />
               <Route path="/manage/model-keys/distribute" element={<AdminRoute><ModelKeyDistribute /></AdminRoute>} />
               <Route path="/evolution/nodes" element={<AdminRoute><Nodes /></AdminRoute>} />

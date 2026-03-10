@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useCreateRole, useGenerateRolePreview } from '../../api/hooks';
+import { useCreateRole, useGenerateRolePreview, type RoleTemplate } from '../../api/hooks';
 import { ErrorMessage } from '../../components/ErrorMessage';
 
 type MdField = 'agentsMd' | 'soulMd' | 'identityMd' | 'userMd' | 'toolsMd' | 'heartbeatMd' | 'bootstrapMd' | 'tasksMd';
@@ -106,14 +106,23 @@ export function RoleCreateWizard() {
 
   async function handleSave() {
     if (!isPreviewValid) return;
-    await createRole.mutateAsync({
+    // Backend expects snake_case keys for MD fields
+    const payload = {
       id: id.trim(),
       name: displayName.trim(),
       mode: (preview?.mode as 'autonomous' | 'copilot') ?? genMode,
       department: department.trim(),
       industry: industry.trim(),
-      ...mdFields,
-    });
+      agents_md: mdFields.agentsMd,
+      soul_md: mdFields.soulMd,
+      identity_md: mdFields.identityMd,
+      user_md: mdFields.userMd,
+      tools_md: mdFields.toolsMd,
+      heartbeat_md: mdFields.heartbeatMd,
+      bootstrap_md: mdFields.bootstrapMd,
+      tasks_md: mdFields.tasksMd,
+    };
+    await createRole.mutateAsync(payload as unknown as Partial<RoleTemplate> & { id: string });
     navigate('/roles');
   }
 

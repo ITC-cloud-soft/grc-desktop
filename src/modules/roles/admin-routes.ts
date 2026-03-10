@@ -18,6 +18,8 @@ import { getDb } from "../../shared/db/connection.js";
 import { paginationSchema } from "../../shared/utils/validators.js";
 import { nodesTable } from "./schema.js";
 import { RolesService } from "./service.js";
+import { chatCompletionJson } from "../../shared/llm/client.js";
+import { buildRoleGenerationPrompt } from "../../shared/llm/prompts.js";
 
 const logger = pino({ name: "admin:roles" });
 
@@ -78,6 +80,12 @@ const assignRoleSchema = z.object({
 
 const updateConfigFileSchema = z.object({
   content: z.string(),
+});
+
+const generatePreviewSchema = z.object({
+  role_description: z.string().min(1).max(5000),
+  company_info: z.string().max(3000).optional(),
+  mode: z.enum(["autonomous", "copilot"]).default("autonomous"),
 });
 
 // ── Route Registration ──────────────────────────
@@ -216,6 +224,36 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       const cloned = await service.cloneTemplate(id, body.new_id, body.new_name);
 
       res.status(201).json({ data: cloned });
+    }),
+  );
+
+  // ── POST /roles/generate-preview — AI role generation ──
+
+  router.post(
+    "/roles/generate-preview",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = generatePreviewSchema.parse(req.body);
+
+      logger.info(
+        { mode: body.mode, admin: req.auth?.sub },
+        "Generating AI role preview",
+      );
+
+      const messages = buildRoleGenerationPrompt({
+        roleDescription: body.role_description,
+        companyInfo: body.company_info,
+        mode: body.mode,
+      });
+
+      const result = await chatCompletionJson<Record<string, unknown>>(
+        { messages, temperature: 0.7 },
+      );
+
+      // Ensure mode is set from request
+      result.mode = result.mode ?? body.mode;
+
+      res.json(result);
     }),
   );
 

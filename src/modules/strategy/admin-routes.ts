@@ -16,6 +16,8 @@ import { createAdminAuthMiddleware } from "../../shared/middleware/admin-auth.js
 import { asyncHandler } from "../../shared/middleware/error-handler.js";
 import { paginationSchema } from "../../shared/utils/validators.js";
 import { StrategyService } from "./service.js";
+import { chatCompletionJson } from "../../shared/llm/client.js";
+import { buildStrategyGenerationPrompt } from "../../shared/llm/prompts.js";
 
 const logger = pino({ name: "admin:strategy" });
 
@@ -48,6 +50,13 @@ const diffParamSchema = z.object({
 
 const deptParamSchema = z.object({
   dept: z.string().min(1).max(100),
+});
+
+const generatePreviewSchema = z.object({
+  industry: z.string().min(1).max(200),
+  company_info: z.string().min(1).max(5000),
+  mode: z.enum(["new", "update"]).default("new"),
+  update_instruction: z.string().max(3000).optional(),
 });
 
 // ── Route Registration ──────────────────────────
@@ -121,6 +130,46 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         revision: result.revision,
         task_id: result.taskId,
       });
+    }),
+  );
+
+  // ── POST /strategy/generate-preview — AI strategy generation ──
+
+  router.post(
+    "/strategy/generate-preview",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = generatePreviewSchema.parse(req.body);
+
+      logger.info(
+        { mode: body.mode, industry: body.industry, admin: req.auth?.sub },
+        "Generating AI strategy preview",
+      );
+
+      // If update mode, fetch existing strategy for context
+      let existingStrategy: Record<string, unknown> | undefined;
+      if (body.mode === "update") {
+        try {
+          const current = await service.getStrategy();
+          existingStrategy = current as Record<string, unknown>;
+        } catch {
+          // No existing strategy, proceed as new
+        }
+      }
+
+      const messages = buildStrategyGenerationPrompt({
+        industry: body.industry,
+        companyInfo: body.company_info,
+        mode: body.mode,
+        updateInstruction: body.update_instruction,
+        existingStrategy,
+      });
+
+      const result = await chatCompletionJson<Record<string, unknown>>(
+        { messages, temperature: 0.7 },
+      );
+
+      res.json(result);
     }),
   );
 

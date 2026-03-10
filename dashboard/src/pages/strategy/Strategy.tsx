@@ -116,7 +116,16 @@ function parseShortTerm(raw: unknown): QuarterlyObjective[] {
   try {
     if (!raw) return DEFAULT_SHORT_TERM;
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (Array.isArray(parsed)) return parsed as QuarterlyObjective[];
+    if (Array.isArray(parsed)) {
+      return parsed.map((q: Record<string, unknown>) => ({
+        quarter: String(q.quarter ?? ''),
+        goals: Array.isArray(q.goals) ? q.goals.map(String) : [],
+        kpis: Array.isArray(q.kpis)
+          ? q.kpis.map((k: unknown) =>
+              typeof k === 'string' ? k : `${(k as Record<string, unknown>).name ?? ''}: ${(k as Record<string, unknown>).target ?? ''}`)
+          : [],
+      }));
+    }
   } catch {
     // fall through
   }
@@ -127,7 +136,17 @@ function parseMidTerm(raw: unknown): MidTermObjectives {
   try {
     if (!raw) return DEFAULT_MID_TERM;
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as MidTermObjectives;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      return {
+        revenueTarget: String(obj.revenueTarget ?? ''),
+        goals: Array.isArray(obj.goals) ? obj.goals.map(String) : [],
+        kpis: Array.isArray(obj.kpis)
+          ? obj.kpis.map((k: unknown) =>
+              typeof k === 'string' ? k : `${(k as Record<string, unknown>).name ?? ''}: ${(k as Record<string, unknown>).target ?? ''}`)
+          : [],
+      };
+    }
   } catch {
     // fall through
   }
@@ -138,7 +157,30 @@ function parseLongTerm(raw: unknown): LongTermObjectives {
   try {
     if (!raw) return DEFAULT_LONG_TERM;
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as LongTermObjectives;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      const milestones: LongTermMilestone[] = [];
+      if (Array.isArray(obj.milestones)) {
+        obj.milestones.forEach((m: unknown, idx: number) => {
+          if (typeof m === 'string') {
+            // AI format: "Year N: description" or just "description"
+            const yearMatch = m.match(/^Year\s*(\d+)\s*[:：]\s*(.+)$/i);
+            if (yearMatch) {
+              milestones.push({ year: parseInt(yearMatch[1], 10), description: yearMatch[2] });
+            } else {
+              milestones.push({ year: idx + 1, description: m });
+            }
+          } else if (m && typeof m === 'object') {
+            const mo = m as Record<string, unknown>;
+            milestones.push({
+              year: Number(mo.year ?? idx + 1),
+              description: String(mo.description ?? ''),
+            });
+          }
+        });
+      }
+      return { milestones: milestones.length > 0 ? milestones : DEFAULT_LONG_TERM.milestones };
+    }
   } catch {
     // fall through
   }
@@ -149,7 +191,30 @@ function parseBudgets(raw: unknown): Record<Department, DepartmentBudget> {
   try {
     if (!raw) return defaultBudgets();
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+
+    // AI format: array of {department, annual, q1, q2, q3, q4}
+    if (Array.isArray(parsed)) {
+      const result = defaultBudgets();
+      for (const item of parsed) {
+        const obj = item as Record<string, unknown>;
+        const deptName = String(obj.department ?? '').toLowerCase().trim();
+        // Try to match to known department
+        const matched = DEPARTMENTS.find(d => deptName.includes(d));
+        if (matched) {
+          result[matched] = {
+            annual: String(obj.annual ?? '0'),
+            q1: String(obj.q1 ?? '0'),
+            q2: String(obj.q2 ?? '0'),
+            q3: String(obj.q3 ?? '0'),
+            q4: String(obj.q4 ?? '0'),
+          };
+        }
+      }
+      return result;
+    }
+
+    // DB format: Record<department, budget>
+    if (parsed && typeof parsed === 'object') {
       const result = defaultBudgets();
       for (const dept of DEPARTMENTS) {
         if ((parsed as Record<string, unknown>)[dept]) {
@@ -168,14 +233,32 @@ function parseKpis(raw: unknown): Record<Department, DepartmentKpiEntry[]> {
   try {
     if (!raw) return defaultKpis();
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+
+    // AI format: array of {department, kpi, target, current?, progress?}
+    if (Array.isArray(parsed)) {
+      const result = defaultKpis();
+      for (const item of parsed) {
+        const obj = item as Record<string, unknown>;
+        const deptName = String(obj.department ?? '').toLowerCase().trim();
+        const matched = DEPARTMENTS.find(d => deptName.includes(d));
+        if (matched) {
+          result[matched].push({
+            name: String(obj.kpi ?? obj.name ?? ''),
+            target: String(obj.target ?? ''),
+          });
+        }
+      }
+      return result;
+    }
+
+    // DB format: Record<department, kpiEntry[]>
+    if (parsed && typeof parsed === 'object') {
       const result = defaultKpis();
       for (const dept of DEPARTMENTS) {
         const deptData = (parsed as Record<string, unknown>)[dept];
         if (Array.isArray(deptData)) {
           result[dept] = deptData as DepartmentKpiEntry[];
         } else if (deptData && typeof deptData === 'object') {
-          // Handle object format { kpiName: target, ... }
           result[dept] = Object.entries(deptData as Record<string, string>).map(([name, target]) => ({ name, target }));
         }
       }
@@ -831,15 +914,16 @@ export function Strategy() {
   }, [strategy, initFromStrategy]);
 
   // Build payload from current form state
-  const buildPayload = (): Partial<CompanyStrategy> => ({
-    companyMission: mission,
-    companyVision: vision,
-    companyValues: values,
-    shortTermObjectives: shortTerm,
-    midTermObjectives: midTerm,
-    longTermObjectives: longTerm,
-    departmentBudgets: budgets as Record<string, unknown>,
-    departmentKpis: kpis as Record<string, unknown>,
+  // Backend expects snake_case keys (Zod schema validation)
+  const buildPayload = (): Record<string, unknown> => ({
+    company_mission: mission,
+    company_vision: vision,
+    company_values: values,
+    short_term_objectives: shortTerm,
+    mid_term_objectives: midTerm,
+    long_term_objectives: longTerm,
+    department_budgets: budgets,
+    department_kpis: kpis,
   });
 
   const showStatus = (type: 'success' | 'error', text: string) => {
@@ -847,8 +931,13 @@ export function Strategy() {
     setTimeout(() => setStatusMsg(null), 4000);
   };
 
-  const handleSaveDraft = () => {
-    window.alert('Draft saved locally. Use "Save & Deploy" to persist and broadcast to agents.');
+  const handleSaveDraft = async () => {
+    try {
+      await updateStrategy.mutateAsync(buildPayload() as Partial<CompanyStrategy>);
+      showStatus('success', 'Strategy saved to database.');
+    } catch (err) {
+      showStatus('error', err instanceof Error ? err.message : 'Save failed.');
+    }
   };
 
   const handleSaveAndDeploy = () => {
@@ -857,7 +946,7 @@ export function Strategy() {
 
   const handleConfirmDeploy = async () => {
     try {
-      await updateStrategy.mutateAsync(buildPayload());
+      await updateStrategy.mutateAsync(buildPayload() as Partial<CompanyStrategy>);
       await deployStrategy.mutateAsync();
       setShowDeployModal(false);
       showStatus('success', 'Strategy saved and deployed to all agents.');
@@ -1219,11 +1308,15 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
               borderRadius: 6,
               padding: '0.875rem',
               marginTop: '0.5rem',
+              maxHeight: '50vh',
+              overflowY: 'auto',
             }}
           >
             <p className="text-muted" style={{ fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
               {t('ai.previewHint', 'Preview generated. Review the output below before applying.')}
             </p>
+
+            {/* Mission / Vision / Values */}
             {preview.companyMission && (
               <div style={{ marginBottom: '0.5rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem' }}>Mission</span>
@@ -1242,6 +1335,120 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
                 <p style={{ fontSize: '0.8125rem', margin: 0 }}>{preview.companyValues}</p>
               </div>
             )}
+
+            {/* Short-term Objectives */}
+            {Array.isArray(preview.shortTermObjectives) && (preview.shortTermObjectives as Record<string, unknown>[]).length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  {t('shortTerm.title', 'Quarterly Objectives')}
+                </span>
+                {(preview.shortTermObjectives as Array<{ quarter?: string; goals?: string[]; kpis?: Array<{ name?: string; target?: string; owner?: string }> }>).map((q, qi) => (
+                  <div key={qi} style={{ background: 'var(--bg, #fff)', borderRadius: 4, padding: '0.5rem', marginBottom: '0.375rem', border: '1px solid var(--border-light, #eee)' }}>
+                    <strong style={{ fontSize: '0.8125rem' }}>{q.quarter ?? `Q${qi + 1}`}</strong>
+                    {Array.isArray(q.goals) && q.goals.length > 0 && (
+                      <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', fontSize: '0.8125rem' }}>
+                        {q.goals.map((g, gi) => <li key={gi}>{g}</li>)}
+                      </ul>
+                    )}
+                    {Array.isArray(q.kpis) && q.kpis.length > 0 && (
+                      <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted, #6b7280)' }}>
+                        KPIs: {q.kpis.map(k => `${k.name ?? ''}: ${k.target ?? ''}`).join(' | ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Mid-term Objectives */}
+            {preview.midTermObjectives && typeof preview.midTermObjectives === 'object' && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  {t('midTerm.title', 'Annual Objectives')}
+                </span>
+                <div style={{ background: 'var(--bg, #fff)', borderRadius: 4, padding: '0.5rem', border: '1px solid var(--border-light, #eee)', fontSize: '0.8125rem' }}>
+                  {(preview.midTermObjectives as Record<string, unknown>).revenueTarget && (
+                    <p style={{ margin: '0 0 0.25rem' }}>
+                      <strong>{t('midTerm.revenueTarget', 'Revenue Target')}:</strong>{' '}
+                      {String((preview.midTermObjectives as Record<string, unknown>).revenueTarget)}
+                    </p>
+                  )}
+                  {Array.isArray((preview.midTermObjectives as Record<string, unknown>).goals) && (
+                    <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+                      {((preview.midTermObjectives as Record<string, unknown>).goals as string[]).map((g, i) => <li key={i}>{g}</li>)}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Long-term Objectives */}
+            {preview.longTermObjectives && typeof preview.longTermObjectives === 'object' && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  {t('longTerm.title', '3-5 Year Vision')}
+                </span>
+                <div style={{ background: 'var(--bg, #fff)', borderRadius: 4, padding: '0.5rem', border: '1px solid var(--border-light, #eee)', fontSize: '0.8125rem' }}>
+                  {(preview.longTermObjectives as Record<string, unknown>).vision && (
+                    <p style={{ margin: '0 0 0.25rem', fontStyle: 'italic' }}>
+                      {String((preview.longTermObjectives as Record<string, unknown>).vision)}
+                    </p>
+                  )}
+                  {Array.isArray((preview.longTermObjectives as Record<string, unknown>).milestones) && (
+                    <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+                      {((preview.longTermObjectives as Record<string, unknown>).milestones as Array<string | { year?: number; description?: string }>).map((m, i) => (
+                        <li key={i}>{typeof m === 'string' ? m : `${m.year ? `Year ${m.year}: ` : ''}${m.description ?? ''}`}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Strategic Priorities */}
+            {Array.isArray(preview.strategicPriorities) && (preview.strategicPriorities as string[]).length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  Strategic Priorities
+                </span>
+                <ol style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.8125rem' }}>
+                  {(preview.strategicPriorities as string[]).map((p, i) => <li key={i}>{p}</li>)}
+                </ol>
+              </div>
+            )}
+
+            {/* Department Budgets summary */}
+            {Array.isArray(preview.departmentBudgets) && (preview.departmentBudgets as Record<string, unknown>[]).length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  {t('budgets.title', 'Department Budgets')}
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                  {(preview.departmentBudgets as Array<{ department?: string; annual?: number }>).map((b, i) => (
+                    <span key={i} style={{ background: 'var(--bg, #fff)', border: '1px solid var(--border-light, #eee)', borderRadius: 4, padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                      {b.department}: ${typeof b.annual === 'number' ? b.annual.toLocaleString() : b.annual}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Department KPIs summary */}
+            {Array.isArray(preview.departmentKpis) && (preview.departmentKpis as Record<string, unknown>[]).length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
+                  {t('kpis.title', 'Department KPIs')}
+                </span>
+                <div style={{ fontSize: '0.75rem' }}>
+                  {(preview.departmentKpis as Array<{ department?: string; kpi?: string; target?: string }>).map((k, i) => (
+                    <span key={i} style={{ display: 'inline-block', background: 'var(--bg, #fff)', border: '1px solid var(--border-light, #eee)', borderRadius: 4, padding: '0.25rem 0.5rem', marginRight: '0.375rem', marginBottom: '0.25rem' }}>
+                      {k.department} — {k.kpi}: {k.target}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               className="btn btn-primary"
               type="button"

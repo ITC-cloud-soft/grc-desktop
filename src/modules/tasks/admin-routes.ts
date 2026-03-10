@@ -35,23 +35,23 @@ const taskListQuerySchema = paginationSchema.extend({
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(500),
-  description: z.string().optional(),
-  category: z.enum(["strategic", "operational", "administrative", "expense"]).optional(),
+  description: z.string().nullable().optional(),
+  category: z.enum(["strategic", "operational", "administrative", "expense"]).nullable().optional(),
   priority: z.enum(["critical", "high", "medium", "low"]).optional(),
   status: z.enum([
     "draft", "pending", "in_progress", "blocked",
     "review", "approved", "completed", "cancelled",
   ]).optional(),
-  assigned_role_id: z.string().max(50).optional(),
-  assigned_node_id: z.string().max(255).optional(),
-  assigned_by: z.string().max(255).optional(),
-  deadline: z.string().datetime().optional(),
-  depends_on: z.array(z.string()).optional(),
-  collaborators: z.array(z.string()).optional(),
-  deliverables: z.array(z.string()).optional(),
-  notes: z.string().optional(),
-  expense_amount: z.string().max(30).optional(),
-  expense_currency: z.string().max(10).optional(),
+  assigned_role_id: z.string().max(50).nullable().optional(),
+  assigned_node_id: z.string().max(255).nullable().optional(),
+  assigned_by: z.string().max(255).nullable().optional(),
+  deadline: z.string().datetime().nullable().optional(),
+  depends_on: z.array(z.string()).nullable().optional(),
+  collaborators: z.array(z.string()).nullable().optional(),
+  deliverables: z.array(z.string()).nullable().optional(),
+  notes: z.string().nullable().optional(),
+  expense_amount: z.string().max(30).nullable().optional(),
+  expense_currency: z.string().max(10).nullable().optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -276,6 +276,21 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       const admin = req.auth?.sub ?? "admin";
 
       const task = await service.approveExpense(id, admin);
+
+      res.json({ data: task });
+    }),
+  );
+
+  // ── POST /tasks/:id/expense/pay — Mark expense as paid ──
+
+  router.post(
+    "/tasks/:id/expense/pay",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const admin = req.auth?.sub ?? "admin";
+
+      const task = await service.markExpensePaid(id, admin);
 
       res.json({ data: task });
     }),

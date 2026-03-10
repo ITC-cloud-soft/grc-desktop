@@ -828,6 +828,9 @@ export interface Task {
   expenseApproved: number | null;
   expenseApprovedBy: string | null;
   expenseApprovedAt: string | null;
+  expensePaid: number | null;
+  expensePaidBy: string | null;
+  expensePaidAt: string | null;
   resultSummary: string | null;
   resultData: unknown;
   version: number;
@@ -991,6 +994,19 @@ export function useRejectExpense() {
   return useMutation({
     mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
       apiClient.post(`/api/v1/admin/tasks/${taskId}/expense/reject`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'task'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tasks', 'expenses'] });
+    },
+  });
+}
+
+export function useMarkExpensePaid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      apiClient.post(`/api/v1/admin/tasks/${taskId}/expense/pay`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'tasks'] });
       qc.invalidateQueries({ queryKey: ['admin', 'task'] });

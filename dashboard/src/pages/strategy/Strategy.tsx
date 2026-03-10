@@ -1337,7 +1337,7 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
             )}
 
             {/* Short-term Objectives */}
-            {Array.isArray(preview.shortTermObjectives) && (preview.shortTermObjectives as Record<string, unknown>[]).length > 0 && (
+            {Array.isArray(preview.shortTermObjectives) && (preview.shortTermObjectives as Record<string, unknown>[]).length > 0 ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   {t('shortTerm.title', 'Quarterly Objectives')}
@@ -1358,55 +1358,55 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
                   </div>
                 ))}
               </div>
-            )}
+            ) : null}
 
             {/* Mid-term Objectives */}
-            {preview.midTermObjectives && typeof preview.midTermObjectives === 'object' && (
+            {preview.midTermObjectives && typeof preview.midTermObjectives === 'object' ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   {t('midTerm.title', 'Annual Objectives')}
                 </span>
                 <div style={{ background: 'var(--bg, #fff)', borderRadius: 4, padding: '0.5rem', border: '1px solid var(--border-light, #eee)', fontSize: '0.8125rem' }}>
-                  {(preview.midTermObjectives as Record<string, unknown>).revenueTarget && (
+                  {(preview.midTermObjectives as Record<string, unknown>).revenueTarget ? (
                     <p style={{ margin: '0 0 0.25rem' }}>
                       <strong>{t('midTerm.revenueTarget', 'Revenue Target')}:</strong>{' '}
                       {String((preview.midTermObjectives as Record<string, unknown>).revenueTarget)}
                     </p>
-                  )}
-                  {Array.isArray((preview.midTermObjectives as Record<string, unknown>).goals) && (
+                  ) : null}
+                  {Array.isArray((preview.midTermObjectives as Record<string, unknown>).goals) ? (
                     <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
                       {((preview.midTermObjectives as Record<string, unknown>).goals as string[]).map((g, i) => <li key={i}>{g}</li>)}
                     </ul>
-                  )}
+                  ) : null}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Long-term Objectives */}
-            {preview.longTermObjectives && typeof preview.longTermObjectives === 'object' && (
+            {preview.longTermObjectives && typeof preview.longTermObjectives === 'object' ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   {t('longTerm.title', '3-5 Year Vision')}
                 </span>
                 <div style={{ background: 'var(--bg, #fff)', borderRadius: 4, padding: '0.5rem', border: '1px solid var(--border-light, #eee)', fontSize: '0.8125rem' }}>
-                  {(preview.longTermObjectives as Record<string, unknown>).vision && (
+                  {(preview.longTermObjectives as Record<string, unknown>).vision ? (
                     <p style={{ margin: '0 0 0.25rem', fontStyle: 'italic' }}>
                       {String((preview.longTermObjectives as Record<string, unknown>).vision)}
                     </p>
-                  )}
-                  {Array.isArray((preview.longTermObjectives as Record<string, unknown>).milestones) && (
+                  ) : null}
+                  {Array.isArray((preview.longTermObjectives as Record<string, unknown>).milestones) ? (
                     <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
                       {((preview.longTermObjectives as Record<string, unknown>).milestones as Array<string | { year?: number; description?: string }>).map((m, i) => (
                         <li key={i}>{typeof m === 'string' ? m : `${m.year ? `Year ${m.year}: ` : ''}${m.description ?? ''}`}</li>
                       ))}
                     </ul>
-                  )}
+                  ) : null}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Strategic Priorities */}
-            {Array.isArray(preview.strategicPriorities) && (preview.strategicPriorities as string[]).length > 0 && (
+            {Array.isArray(preview.strategicPriorities) && (preview.strategicPriorities as string[]).length > 0 ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   Strategic Priorities
@@ -1415,10 +1415,10 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
                   {(preview.strategicPriorities as string[]).map((p, i) => <li key={i}>{p}</li>)}
                 </ol>
               </div>
-            )}
+            ) : null}
 
             {/* Department Budgets summary */}
-            {Array.isArray(preview.departmentBudgets) && (preview.departmentBudgets as Record<string, unknown>[]).length > 0 && (
+            {Array.isArray(preview.departmentBudgets) && (preview.departmentBudgets as Record<string, unknown>[]).length > 0 ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   {t('budgets.title', 'Department Budgets')}
@@ -1431,10 +1431,10 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Department KPIs summary */}
-            {Array.isArray(preview.departmentKpis) && (preview.departmentKpis as Record<string, unknown>[]).length > 0 && (
+            {Array.isArray(preview.departmentKpis) && (preview.departmentKpis as Record<string, unknown>[]).length > 0 ? (
               <div style={{ marginBottom: '0.75rem' }}>
                 <span className="form-label" style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.375rem' }}>
                   {t('kpis.title', 'Department KPIs')}
@@ -1447,7 +1447,7 @@ function AiGenerateModal({ onClose, onApply, generateStrategy }: AiGenerateModal
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
             <button
               className="btn btn-primary"

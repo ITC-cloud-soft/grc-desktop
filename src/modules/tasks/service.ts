@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, sql, and, like, gte } from "drizzle-orm";
+import { eq, desc, sql, and, like, gte, isNotNull } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
 import {
@@ -369,6 +369,25 @@ export class TasksService {
       );
     }
 
+    // Guard: cannot complete a task with an unpaid approved expense
+    if (newStatus === "completed" && task.expenseAmount !== null) {
+      if (task.expenseApproved === 0) {
+        throw new BadRequestError(
+          "Cannot complete task: expense is still pending approval",
+        );
+      }
+      if (task.expenseApproved === 2) {
+        throw new BadRequestError(
+          "Cannot complete task: expense was rejected",
+        );
+      }
+      if (task.expenseApproved === 1 && task.expensePaid !== 1) {
+        throw new BadRequestError(
+          "Cannot complete task: expense is approved but not yet paid",
+        );
+      }
+    }
+
     const updateSet: Record<string, unknown> = {
       status: newStatus,
       version: task.version + 1,
@@ -538,13 +557,17 @@ export class TasksService {
       throw new BadRequestError("This task is not an expense task");
     }
 
-    // Set to cancelled status and clear expense approval
+    if (task.expenseApproved === 2) {
+      throw new BadRequestError("Expense is already rejected");
+    }
+
+    // Set expense_approved = 2 (rejected)
     await db
       .update(tasksTable)
       .set({
-        expenseApproved: 0,
-        expenseApprovedBy: null,
-        expenseApprovedAt: null,
+        expenseApproved: 2,
+        expenseApprovedBy: rejectedBy,
+        expenseApprovedAt: new Date(),
         version: task.version + 1,
       })
       .where(eq(tasksTable.id, taskId));
@@ -575,13 +598,78 @@ export class TasksService {
   }
 
   /**
-   * Get the expense approval queue (tasks with expense_approved = 0).
+   * Mark an approved expense as paid.
+   * Expense must be approved (expenseApproved === 1) before it can be paid.
+   */
+  async markExpensePaid(taskId: string, paidBy: string) {
+    const db = getDb();
+
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.id, taskId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new NotFoundError("Task");
+    }
+
+    const task = rows[0];
+
+    if (task.expenseApproved === null) {
+      throw new BadRequestError("This task is not an expense task");
+    }
+
+    if (task.expenseApproved !== 1) {
+      throw new BadRequestError(
+        "Expense must be approved before it can be marked as paid",
+      );
+    }
+
+    if (task.expensePaid === 1) {
+      throw new BadRequestError("Expense is already marked as paid");
+    }
+
+    await db
+      .update(tasksTable)
+      .set({
+        expensePaid: 1,
+        expensePaidBy: paidBy,
+        expensePaidAt: new Date(),
+        version: task.version + 1,
+      })
+      .where(eq(tasksTable.id, taskId));
+
+    // Log the payment
+    await db.insert(taskProgressLogTable).values({
+      taskId,
+      actor: paidBy,
+      action: "expense_paid",
+      fromStatus: null,
+      toStatus: null,
+      details: { amount: task.expenseAmount, currency: task.expenseCurrency },
+    });
+
+    logger.info({ taskId, paidBy }, "Expense marked as paid");
+
+    const updated = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.id, taskId))
+      .limit(1);
+
+    return updated[0];
+  }
+
+  /**
+   * Get the expense queue — all tasks that have an expense amount set.
+   * Includes pending (0), approved (1), rejected (2), and paid items.
    */
   async getExpenseQueue(opts: { page: number; limit: number }) {
     const db = getDb();
     const offset = (opts.page - 1) * opts.limit;
 
-    const whereClause = eq(tasksTable.expenseApproved, 0);
+    const whereClause = isNotNull(tasksTable.expenseAmount);
 
     const [rows, totalResult] = await Promise.all([
       db

@@ -6,6 +6,9 @@ import {
   useChangeTaskStatus,
   useAddTaskComment,
   useDeleteTask,
+  useApproveExpense,
+  useRejectExpense,
+  useMarkExpensePaid,
 } from '../../api/hooks';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/Modal';
@@ -61,12 +64,16 @@ export function TaskDetail() {
   const changeStatus = useChangeTaskStatus();
   const addComment = useAddTaskComment();
   const deleteTask = useDeleteTask();
+  const approveExpense = useApproveExpense();
+  const rejectExpense = useRejectExpense();
+  const markExpensePaid = useMarkExpensePaid();
 
   const [commentContent, setCommentContent] = useState('');
   const [resultSummary, setResultSummary] = useState('');
   const [pendingTransition, setPendingTransition] = useState<StatusTransition | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [expenseActionError, setExpenseActionError] = useState<string | null>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
 
   if (isLoading) {
@@ -129,8 +136,47 @@ export function TaskDetail() {
     navigate('/tasks');
   }
 
-  const expensePending = task.expenseAmount !== null && task.expenseApproved === null;
-  const expenseApproved = task.expenseApproved === 1;
+  // Expense lifecycle state
+  // expenseApproved: 0=pending, 1=approved, 2=rejected
+  // expensePaid: null=not yet, 1=paid
+  const hasExpense = task.expenseAmount !== null;
+  const expensePendingApproval = hasExpense && task.expenseApproved === 0;
+  const expenseIsApproved = task.expenseApproved === 1;
+  const expenseIsRejected = task.expenseApproved === 2;
+  const expenseIsPaid = task.expensePaid === 1;
+  const expenseAwaitingPayment = expenseIsApproved && !expenseIsPaid;
+
+  const isExpenseMutating = approveExpense.isPending || rejectExpense.isPending || markExpensePaid.isPending;
+
+  async function handleExpenseApprove() {
+    if (!id) return;
+    setExpenseActionError(null);
+    try {
+      await approveExpense.mutateAsync(id);
+    } catch (err) {
+      setExpenseActionError((err as Error).message ?? 'Approval failed');
+    }
+  }
+
+  async function handleExpenseReject() {
+    if (!id) return;
+    setExpenseActionError(null);
+    try {
+      await rejectExpense.mutateAsync({ taskId: id, reason: 'Rejected by admin' });
+    } catch (err) {
+      setExpenseActionError((err as Error).message ?? 'Rejection failed');
+    }
+  }
+
+  async function handleExpensePay() {
+    if (!id) return;
+    setExpenseActionError(null);
+    try {
+      await markExpensePaid.mutateAsync(id);
+    } catch (err) {
+      setExpenseActionError((err as Error).message ?? 'Payment failed');
+    }
+  }
 
   return (
     <div className="page">
@@ -261,10 +307,10 @@ export function TaskDetail() {
       )}
 
       {/* Expense section */}
-      {task.expenseAmount !== null && (
+      {hasExpense && (
         <div className="card" style={{ marginBottom: '1rem' }}>
           <h2 className="page-subtitle" style={{ marginBottom: '0.75rem' }}>
-            Expense
+            经费
           </h2>
           <div
             style={{
@@ -274,29 +320,155 @@ export function TaskDetail() {
             }}
           >
             <InfoRow
-              label="Amount"
+              label="金额"
               value={`${task.expenseCurrency ?? ''} ${task.expenseAmount ?? ''}`}
             />
             <div>
-              <div className="form-label">Approval Status</div>
+              <div className="form-label">审批状态</div>
               <span
                 className={
-                  expensePending
+                  expensePendingApproval
                     ? 'text-warning'
-                    : expenseApproved
+                    : expenseIsApproved
                     ? 'text-success'
-                    : 'text-danger'
+                    : expenseIsRejected
+                    ? 'text-danger'
+                    : 'text-muted'
                 }
+                style={{ fontWeight: 600 }}
               >
-                {expensePending ? 'Pending' : expenseApproved ? 'Approved' : 'Rejected'}
+                {expensePendingApproval
+                  ? '待审批'
+                  : expenseIsApproved
+                  ? '已批准'
+                  : expenseIsRejected
+                  ? '已拒绝'
+                  : '—'}
+              </span>
+            </div>
+            <div>
+              <div className="form-label">付款状态</div>
+              <span
+                className={expenseIsPaid ? 'text-success' : expenseAwaitingPayment ? 'text-warning' : 'text-muted'}
+                style={{ fontWeight: 600 }}
+              >
+                {expenseIsPaid ? '已付款' : expenseAwaitingPayment ? '待付款' : '—'}
               </span>
             </div>
             {task.expenseApprovedBy && (
-              <InfoRow label="Approved By" value={task.expenseApprovedBy} mono />
+              <InfoRow label="审批人" value={task.expenseApprovedBy} mono />
             )}
             {task.expenseApprovedAt && (
-              <InfoRow label="Approved At" value={formatDate(task.expenseApprovedAt)} />
+              <InfoRow label="审批时间" value={formatDate(task.expenseApprovedAt)} />
             )}
+            {task.expensePaidBy && (
+              <InfoRow label="付款人" value={task.expensePaidBy} mono />
+            )}
+            {task.expensePaidAt && (
+              <InfoRow label="付款时间" value={formatDate(task.expensePaidAt)} />
+            )}
+          </div>
+
+          {/* Expense lifecycle actions */}
+          {isAdmin && (expensePendingApproval || expenseAwaitingPayment) && (
+            <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border, #e2e2e2)' }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.875rem' }}>经费操作</div>
+              <div className="action-group">
+                {expensePendingApproval && (
+                  <>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleExpenseApprove}
+                      disabled={isExpenseMutating}
+                      type="button"
+                    >
+                      {approveExpense.isPending ? '处理中...' : '审批通过'}
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={handleExpenseReject}
+                      disabled={isExpenseMutating}
+                      type="button"
+                    >
+                      {rejectExpense.isPending ? '处理中...' : '拒绝'}
+                    </button>
+                  </>
+                )}
+                {expenseAwaitingPayment && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleExpensePay}
+                    disabled={isExpenseMutating}
+                    type="button"
+                  >
+                    {markExpensePaid.isPending ? '处理中...' : '💰 确认付款'}
+                  </button>
+                )}
+              </div>
+              {expenseActionError && (
+                <p className="text-danger" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                  {expenseActionError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Expense lifecycle progress */}
+          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border, #e2e2e2)' }}>
+            <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.875rem' }}>经费流程</div>
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span
+                className="tag"
+                style={{
+                  background: 'var(--primary-bg, #e3f2fd)',
+                  fontWeight: 600,
+                }}
+              >
+                ① 创建
+              </span>
+              <span style={{ color: 'var(--text-muted, #888)' }}>→</span>
+              <span
+                className="tag"
+                style={{
+                  background: expensePendingApproval
+                    ? 'var(--warning-bg, #fff3cd)'
+                    : expenseIsApproved || expenseIsRejected
+                    ? 'var(--primary-bg, #e3f2fd)'
+                    : 'var(--surface-alt, #f5f5f5)',
+                  fontWeight: expensePendingApproval ? 700 : 400,
+                  outline: expensePendingApproval ? '2px solid var(--warning, #ffc107)' : 'none',
+                }}
+              >
+                ② 审批
+              </span>
+              <span style={{ color: 'var(--text-muted, #888)' }}>→</span>
+              <span
+                className="tag"
+                style={{
+                  background: expenseAwaitingPayment
+                    ? 'var(--warning-bg, #fff3cd)'
+                    : expenseIsPaid
+                    ? 'var(--primary-bg, #e3f2fd)'
+                    : 'var(--surface-alt, #f5f5f5)',
+                  fontWeight: expenseAwaitingPayment ? 700 : 400,
+                  outline: expenseAwaitingPayment ? '2px solid var(--warning, #ffc107)' : 'none',
+                }}
+              >
+                ③ 付款
+              </span>
+              <span style={{ color: 'var(--text-muted, #888)' }}>→</span>
+              <span
+                className="tag"
+                style={{
+                  background: expenseIsPaid
+                    ? 'var(--success-bg, #d4edda)'
+                    : 'var(--surface-alt, #f5f5f5)',
+                  fontWeight: expenseIsPaid ? 700 : 400,
+                }}
+              >
+                ④ 完成
+              </span>
+            </div>
           </div>
         </div>
       )}

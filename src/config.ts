@@ -123,8 +123,9 @@ export function loadConfig(): GrcConfig {
   const nodeEnv = envString("NODE_ENV", "development");
 
   // RS256 key pair for JWT signing/verification
-  let jwtPrivateKey = process.env.JWT_PRIVATE_KEY?.trim() || "";
-  let jwtPublicKey = process.env.JWT_PUBLIC_KEY?.trim() || "";
+  // Replace literal \n with actual newlines for PEM format
+  let jwtPrivateKey = (process.env.JWT_PRIVATE_KEY?.trim() || "").replace(/\\n/g, "\n");
+  let jwtPublicKey = (process.env.JWT_PUBLIC_KEY?.trim() || "").replace(/\\n/g, "\n");
 
   // Fail fast: reject missing keys in production
   if (nodeEnv === "production" && (!jwtPrivateKey || !jwtPublicKey)) {

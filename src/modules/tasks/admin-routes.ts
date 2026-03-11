@@ -174,20 +174,20 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
       const task = await service.createTask({
         title: body.title,
-        description: body.description,
-        category: body.category,
+        description: body.description ?? undefined,
+        category: body.category ?? undefined,
         priority: body.priority,
         status: body.status,
-        assignedRoleId: body.assigned_role_id,
-        assignedNodeId: body.assigned_node_id,
+        assignedRoleId: body.assigned_role_id ?? undefined,
+        assignedNodeId: body.assigned_node_id ?? undefined,
         assignedBy: body.assigned_by ?? admin,
         deadline: body.deadline ? new Date(body.deadline) : undefined,
         dependsOn: body.depends_on,
         collaborators: body.collaborators,
         deliverables: body.deliverables,
-        notes: body.notes,
-        expenseAmount: body.expense_amount,
-        expenseCurrency: body.expense_currency,
+        notes: body.notes ?? undefined,
+        expenseAmount: body.expense_amount ?? undefined,
+        expenseCurrency: body.expense_currency ?? undefined,
       });
 
       res.status(201).json({ data: task });

@@ -408,7 +408,7 @@ export async function register(app: Express, config: GrcConfig) {
     asyncHandler(async (req: Request, res: Response) => {
       const body = emailVerifyCodeSchema.parse(req.body);
 
-      const verified = await authService.verifyCode(body.email, body.code, true);
+      const verified = await authService.verifyCode(body.email, body.code, false);
 
       res.json({
         ok: true,
@@ -421,7 +421,13 @@ export async function register(app: Express, config: GrcConfig) {
     "/email/register",
     authRateLimit,
     asyncHandler(async (req: Request, res: Response) => {
-      const body = emailRegisterSchema.parse(req.body);
+      let body;
+      try {
+        body = emailRegisterSchema.parse(req.body);
+      } catch (err) {
+        logger.warn({ error: err, body: req.body }, "Email registration schema validation failed");
+        throw err;
+      }
 
       let user;
       try {

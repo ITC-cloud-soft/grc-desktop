@@ -5,6 +5,7 @@
  */
 
 import crypto from "node:crypto";
+import { datetimeUtc } from "../../shared/db/datetime-utc.js";
 import {
   mysqlTable,
   char,
@@ -92,11 +93,11 @@ export const verificationCodes = mysqlTable(
       .notNull()
       .$defaultFn(() => crypto.randomUUID()),
     email: varchar("email", { length: 255 }).notNull(),
-    code: varchar("code", { length: 64 }).notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    usedAt: timestamp("used_at"),
+    code: varchar("code", { length: 64 }).notNull(), // SHA256 hash length
+    expiresAt: datetimeUtc("expires_at").notNull(),
+    usedAt: datetimeUtc("used_at"),
     attempts: int("attempts").notNull().default(0),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: datetimeUtc("created_at").notNull().$defaultFn(() => new Date()),
   },
   (table) => [
     index("idx_vc_email_code").on(table.email, table.code),

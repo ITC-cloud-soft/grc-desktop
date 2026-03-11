@@ -570,7 +570,7 @@ export class AuthService implements IAuthService {
     const db = getDb();
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Rate limit: check if a code was sent to this email within the last 60 seconds
+    // Rate limit: check if an unused, unexpired code was sent to this email within the last 60 seconds
     const cutoff = new Date(Date.now() - CODE_RATE_LIMIT_SECONDS * 1000);
     const recent = await db
       .select()
@@ -579,6 +579,8 @@ export class AuthService implements IAuthService {
         and(
           eq(verificationCodes.email, normalizedEmail),
           gt(verificationCodes.createdAt, cutoff),
+          isNull(verificationCodes.usedAt),
+          gt(verificationCodes.expiresAt, new Date()),
         ),
       )
       .limit(1);
@@ -589,14 +591,21 @@ export class AuthService implements IAuthService {
 
     // Generate a 6-digit code
     const code = String(randomInt(100000, 999999));
-    const expiresAt = new Date(Date.now() + CODE_EXPIRES_MINUTES * 60 * 1000);
+    const recordId = uuidv4();
 
-    await db.insert(verificationCodes).values({
-      id: uuidv4(),
-      email: normalizedEmail,
-      code: hmacSha256(code, this.config.jwt.privateKey),
-      expiresAt,
-    });
+    // Insert record using raw SQL to set expires_at = created_at + 5 minutes
+    // This avoids JavaScript timezone conversion issues
+    await db.execute(sql`
+      INSERT INTO verification_codes (id, email, code, created_at, expires_at, attempts)
+      VALUES (
+        ${recordId},
+        ${normalizedEmail},
+        ${hmacSha256(code, this.config.jwt.privateKey)},
+        NOW(),
+        DATE_ADD(NOW(), INTERVAL ${CODE_EXPIRES_MINUTES} MINUTE),
+        0
+      )
+    `);
 
     // Send the code via email
     await this.emailService.sendVerificationCode(normalizedEmail, code);
@@ -618,13 +627,14 @@ export class AuthService implements IAuthService {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Find the latest unexpired, unused code for this email
+    // Use SQL NOW() instead of JavaScript new Date() to avoid timezone issues
     const rows = await db
       .select()
       .from(verificationCodes)
       .where(
         and(
           eq(verificationCodes.email, normalizedEmail),
-          gt(verificationCodes.expiresAt, new Date()),
+          sql`${verificationCodes.expiresAt} > NOW()`,
           isNull(verificationCodes.usedAt),
         ),
       )
@@ -632,14 +642,21 @@ export class AuthService implements IAuthService {
       .limit(1);
 
     if (rows.length === 0) {
+      logger.warn({ email: normalizedEmail, consume }, "No valid verification code found (expired or already used)");
       return false;
     }
 
     const record = rows[0]!;
+    logger.info({
+      email: normalizedEmail,
+      consume,
+      recordId: record.id,
+      attempts: record.attempts
+    }, "Found verification code record");
 
     // Check max attempts
     if (record.attempts >= MAX_CODE_ATTEMPTS) {
-      logger.warn({ email: normalizedEmail }, "Verification code max attempts exceeded");
+      logger.warn({ email: normalizedEmail, attempts: record.attempts }, "Verification code max attempts exceeded");
       return false;
     }
 
@@ -654,6 +671,7 @@ export class AuthService implements IAuthService {
     const codeMatch = record.code.length === expectedHash.length &&
       timingSafeEqual(Buffer.from(record.code, "utf8"), Buffer.from(expectedHash, "utf8"));
     if (!codeMatch) {
+      logger.warn({ email: normalizedEmail, consume }, "Verification code mismatch");
       return false;
     }
 
@@ -663,6 +681,7 @@ export class AuthService implements IAuthService {
         .update(verificationCodes)
         .set({ usedAt: sql`CURRENT_TIMESTAMP` })
         .where(eq(verificationCodes.id, record.id));
+      logger.info({ email: normalizedEmail, recordId: record.id }, "Verification code consumed");
     }
 
     logger.info({ email: normalizedEmail, consumed: consume }, "Verification code verified");
@@ -682,15 +701,19 @@ export class AuthService implements IAuthService {
     const db = getDb();
     const normalizedEmail = email.toLowerCase().trim();
 
+    logger.info({ email: normalizedEmail }, "Starting email registration");
+
     // Verify and consume the code (marks it as used so it cannot be reused)
     const codeValid = await this.verifyCode(normalizedEmail, verificationCode, true);
     if (!codeValid) {
+      logger.warn({ email: normalizedEmail }, "Registration failed: invalid or expired verification code");
       throw new Error("INVALID_CODE");
     }
 
     // Check if a user with this email + provider='email' already exists
     const existing = await this.getUserByProvider("email", normalizedEmail);
     if (existing) {
+      logger.warn({ email: normalizedEmail }, "Registration failed: user already exists");
       throw new Error("USER_EXISTS");
     }
 

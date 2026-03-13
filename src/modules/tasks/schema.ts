@@ -54,6 +54,7 @@ export const tasksTable = mysqlTable(
       .default("pending"),
     assignedRoleId: varchar("assigned_role_id", { length: 50 }),
     assignedNodeId: varchar("assigned_node_id", { length: 255 }),
+    creatorNodeId: varchar("creator_node_id", { length: 255 }),
     assignedBy: varchar("assigned_by", { length: 255 }),
     deadline: timestamp("deadline"),
     dependsOn: json("depends_on"),

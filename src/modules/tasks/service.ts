@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, sql, and, like, gte, isNotNull } from "drizzle-orm";
+import { eq, desc, sql, and, or, like, gte, isNotNull, isNull, inArray } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
 import {
@@ -23,6 +23,10 @@ import {
   AGENT_TASK_POLICIES,
   type AgentTaskPolicy,
 } from "./agent-task-policy.js";
+import {
+  nodeConfigSSE,
+  type TaskSSEEvent,
+} from "../evolution/node-config-sse.js";
 
 const logger = pino({ name: "module:tasks:service" });
 
@@ -184,6 +188,7 @@ export class TasksService {
     assignedRoleId?: string;
     assignedNodeId?: string;
     assignedBy?: string;
+    creatorNodeId?: string;
     deadline?: Date;
     dependsOn?: unknown;
     collaborators?: unknown;
@@ -213,6 +218,7 @@ export class TasksService {
       assignedRoleId: data.assignedRoleId ?? null,
       assignedNodeId: data.assignedNodeId ?? null,
       assignedBy: data.assignedBy ?? null,
+      creatorNodeId: data.creatorNodeId ?? null,
       deadline: data.deadline ?? null,
       dependsOn: data.dependsOn ?? null,
       collaborators: data.collaborators ?? null,
@@ -242,7 +248,35 @@ export class TasksService {
       .where(eq(tasksTable.id, id))
       .limit(1);
 
-    return created[0];
+    const createdTask = created[0];
+
+    // SSE: Notify assignee when task is created as "pending" with a specific node
+    if (
+      createdTask &&
+      (data.status ?? "pending") === "pending" &&
+      data.assignedNodeId
+    ) {
+      const sseEvent: TaskSSEEvent = {
+        event_type: "task_assigned",
+        task_id: createdTask.id,
+        task_code: createdTask.taskCode,
+        title: createdTask.title,
+        priority: createdTask.priority,
+        category: createdTask.category ?? "operational",
+        status: createdTask.status,
+        description: createdTask.description ?? undefined,
+        deliverables: createdTask.deliverables as string[] | undefined,
+        assigned_role_id: createdTask.assignedRoleId ?? undefined,
+        creator_node_id: createdTask.creatorNodeId ?? undefined,
+      };
+      nodeConfigSSE.pushTaskEvent(data.assignedNodeId, sseEvent);
+      logger.info(
+        { taskId: createdTask.id, nodeId: data.assignedNodeId },
+        "SSE task_assigned event pushed on task creation",
+      );
+    }
+
+    return createdTask;
   }
 
   /**
@@ -398,10 +432,18 @@ export class TasksService {
       updateSet.completedAt = new Date();
     }
 
-    await db
+    const updateResult = await db
       .update(tasksTable)
       .set(updateSet as typeof tasksTable.$inferInsert)
-      .where(eq(tasksTable.id, id));
+      .where(and(eq(tasksTable.id, id), eq(tasksTable.version, task.version)));
+
+    // Optimistic lock check: if no rows were affected, another process modified the task
+    const affectedRows = (updateResult as any)[0]?.affectedRows ?? (updateResult as any).changes ?? 1;
+    if (affectedRows === 0) {
+      throw new ConflictError(
+        `Optimistic lock failed for task ${id}: expected version ${task.version}. Refresh and retry.`,
+      );
+    }
 
     // Log the status transition
     await db.insert(taskProgressLogTable).values({
@@ -417,6 +459,65 @@ export class TasksService {
       { taskId: id, from: currentStatus, to: newStatus, actor },
       "Task status changed",
     );
+
+    // ── SSE Notifications ────────────────────────────────────
+    // task_assigned: draft → pending triggers notification to the assignee node
+    if (newStatus === "pending" && task.assignedNodeId) {
+      const sseEvent: TaskSSEEvent = {
+        event_type: "task_assigned",
+        task_id: task.id,
+        task_code: task.taskCode,
+        title: task.title,
+        priority: task.priority,
+        category: task.category ?? "operational",
+        status: newStatus,
+        description: task.description ?? undefined,
+        deliverables: task.deliverables as string[] | undefined,
+        assigned_role_id: task.assignedRoleId ?? undefined,
+        creator_node_id: task.creatorNodeId ?? undefined,
+      };
+      nodeConfigSSE.pushTaskEvent(task.assignedNodeId, sseEvent);
+    }
+
+    // task_completed: any → review triggers notification to the creator node
+    if (newStatus === "review" && task.creatorNodeId) {
+      const sseEvent: TaskSSEEvent = {
+        event_type: "task_completed",
+        task_id: task.id,
+        task_code: task.taskCode,
+        title: task.title,
+        priority: task.priority,
+        category: task.category ?? "operational",
+        status: newStatus,
+        result_summary: task.resultSummary ?? undefined,
+      };
+      nodeConfigSSE.pushTaskEvent(task.creatorNodeId, sseEvent);
+    }
+
+    // task_feedback: review → in_progress triggers rejection/rework notification to the assignee node
+    if (newStatus === "in_progress" && currentStatus === "review" && task.assignedNodeId) {
+      // Fetch the most recent comment for feedback content
+      const recentComments = await db
+        .select({ content: taskCommentsTable.content })
+        .from(taskCommentsTable)
+        .where(eq(taskCommentsTable.taskId, id))
+        .orderBy(desc(taskCommentsTable.createdAt))
+        .limit(1);
+      const latestComment = recentComments[0]?.content ?? undefined;
+
+      const sseEvent: TaskSSEEvent = {
+        event_type: "task_feedback",
+        task_id: task.id,
+        task_code: task.taskCode,
+        title: task.title,
+        priority: task.priority,
+        category: task.category ?? "operational",
+        status: newStatus,
+        feedback: latestComment,
+      };
+      nodeConfigSSE.pushTaskEvent(task.assignedNodeId, sseEvent);
+    }
+    // ── End SSE Notifications ─────────────────────────────────
 
     const updated = await db
       .select()
@@ -795,6 +896,40 @@ export class TasksService {
     return rows;
   }
 
+  /**
+   * Get actionable (pending/in_progress/blocked) tasks for a node.
+   *
+   * Matches on assignedNodeId first; if roleId is also provided, also matches
+   * tasks assigned by role only (assignedNodeId IS NULL but assignedRoleId matches).
+   */
+  async getPendingTasksForNode(nodeId: string, roleId?: string) {
+    const db = getDb();
+
+    const activeStatuses = ["pending", "in_progress", "blocked"] as (typeof tasksTable.status.enumValues)[number][];
+    const statusCondition = inArray(tasksTable.status, activeStatuses);
+
+    let assignmentCondition;
+    if (roleId) {
+      assignmentCondition = or(
+        eq(tasksTable.assignedNodeId, nodeId),
+        and(
+          eq(tasksTable.assignedRoleId, roleId),
+          isNull(tasksTable.assignedNodeId),
+        ),
+      );
+    } else {
+      assignmentCondition = eq(tasksTable.assignedNodeId, nodeId);
+    }
+
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(and(assignmentCondition, statusCondition))
+      .orderBy(desc(tasksTable.createdAt));
+
+    return rows;
+  }
+
   // ── Agent Autonomous Task Creation ────────────────
 
   /**
@@ -981,6 +1116,7 @@ export class TasksService {
       assignedRoleId: targetRole,
       assignedNodeId: params.targetNodeId,
       assignedBy,
+      creatorNodeId: params.creatorNodeId,
       deadline: params.deadline ? new Date(params.deadline) : undefined,
       deliverables: params.deliverables,
       notes: params.notes

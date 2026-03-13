@@ -11,6 +11,23 @@ import pino from "pino";
 
 const logger = pino({ name: "module:evolution:node-config-sse" });
 
+export interface TaskSSEEvent {
+  event_type: "task_assigned" | "task_feedback" | "task_completed";
+  task_id: string;
+  task_code: string;
+  title: string;
+  priority: string;
+  category: string;
+  status: string;
+  description?: string;
+  deliverables?: string[];
+  assigned_role_id?: string;
+  creator_node_id?: string;
+  creator_role_id?: string;
+  feedback?: string;
+  result_summary?: string;
+}
+
 export interface ConfigUpdateEvent {
   revision: number;
   reason: string;
@@ -97,6 +114,34 @@ class NodeConfigSSEManager {
     logger.info(
       { nodeId, revision: event.revision, reason: event.reason, clients: nodeConns.size },
       "Config update pushed to node",
+    );
+    return true;
+  }
+
+  /**
+   * Push a task event to a specific node via SSE.
+   * Used for task lifecycle notifications: assigned, completed, feedback.
+   */
+  pushTaskEvent(nodeId: string, event: TaskSSEEvent): boolean {
+    const nodeConns = this.connections.get(nodeId);
+    if (!nodeConns || nodeConns.size === 0) {
+      logger.debug({ nodeId }, "No SSE connections for node — skipping task event push");
+      return false;
+    }
+
+    const payload = `event: task_event\ndata: ${JSON.stringify(event)}\n\n`;
+
+    for (const res of nodeConns) {
+      try {
+        res.write(payload);
+      } catch {
+        nodeConns.delete(res);
+      }
+    }
+
+    logger.info(
+      { nodeId, eventType: event.event_type, taskId: event.task_id, taskCode: event.task_code, clients: nodeConns.size },
+      "Task event pushed to node",
     );
     return true;
   }

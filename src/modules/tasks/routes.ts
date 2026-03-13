@@ -76,6 +76,28 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   );
 
   // ────────────────────────────────────────────
+  // GET /a2a/tasks/pending?node_id=xxx&role_id=yyy — Get actionable tasks for this node
+  // ────────────────────────────────────────────
+  router.get(
+    "/pending",
+    authRequired,
+    asyncHandler(async (req: Request, res: Response) => {
+      const nodeId = z.string().min(1).parse(req.query.node_id);
+      const roleId = req.query.role_id
+        ? z.string().min(1).parse(req.query.role_id)
+        : undefined;
+
+      const tasks = await service.getPendingTasksForNode(nodeId, roleId);
+
+      res.json({
+        ok: true,
+        tasks,
+        count: tasks.length,
+      });
+    }),
+  );
+
+  // ────────────────────────────────────────────
   // POST /a2a/tasks/update — Update task status/result from agent
   // ────────────────────────────────────────────
   router.post(
@@ -84,12 +106,26 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
     asyncHandler(async (req: Request, res: Response) => {
       const body = taskUpdateSchema.parse(req.body);
 
-      // Verify the task is assigned to this node
+      // Verify the requesting node is either the assignee or the creator
       const task = await service.getTask(body.task_id);
-      if (task.assignedNodeId !== body.node_id) {
+      const isAssignee = task.assignedNodeId === body.node_id;
+      const isCreator = task.creatorNodeId === body.node_id;
+
+      if (!isAssignee && !isCreator) {
         throw new BadRequestError(
-          "Task is not assigned to this node",
+          "Task is not assigned to or created by this node",
         );
+      }
+
+      // Scope check: creator can only accept/reject (review phase operations)
+      // assignee can update status and results (execution phase operations)
+      if (!isAssignee && isCreator && body.status) {
+        const creatorAllowedStatuses = ["approved", "completed", "in_progress"];
+        if (!creatorAllowedStatuses.includes(body.status)) {
+          throw new BadRequestError(
+            `Creator node can only set status to: ${creatorAllowedStatuses.join(", ")}`,
+          );
+        }
       }
 
       // Change status if provided
@@ -99,12 +135,14 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
       // Update result data if provided
       if (body.result_summary !== undefined || body.result_data !== undefined) {
+        // Re-fetch task to get current version after potential status change
+        const current = body.status ? await service.getTask(body.task_id) : task;
         await service.updateTask(
           body.task_id,
           {
             resultSummary: body.result_summary,
             resultData: body.result_data,
-            version: task.version,
+            version: current.version,
           },
           body.node_id,
         );
@@ -180,5 +218,5 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   // ── Mount router under /a2a/tasks prefix ───
   app.use("/a2a/tasks", router);
 
-  logger.info("Tasks module registered — 4 A2A endpoints active");
+  logger.info("Tasks module registered — 5 A2A endpoints active");
 }

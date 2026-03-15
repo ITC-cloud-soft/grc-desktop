@@ -338,6 +338,18 @@ export function useAdminNodes(params?: { page?: number; page_size?: number }) {
   });
 }
 
+export function useDeleteNode() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, string>({
+    mutationFn: (nodeId: string) =>
+      apiClient.del(`/api/v1/admin/evolution/nodes/${nodeId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'nodes'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
+    },
+  });
+}
+
 export function useEvolutionStats() {
   return useQuery<EvolutionStats>({
     queryKey: ['admin', 'evolution', 'stats'],

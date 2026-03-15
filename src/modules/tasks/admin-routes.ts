@@ -17,7 +17,7 @@ import { createAdminAuthMiddleware } from "../../shared/middleware/admin-auth.js
 import { asyncHandler, NotFoundError, BadRequestError } from "../../shared/middleware/error-handler.js";
 import { getDb } from "../../shared/db/connection.js";
 import { uuidSchema, paginationSchema } from "../../shared/utils/validators.js";
-import { tasksTable } from "./schema.js";
+import { tasksTable, taskCommentsTable, taskProgressLogTable } from "./schema.js";
 import { TasksService } from "./service.js";
 
 const logger = pino({ name: "admin:tasks" });
@@ -332,12 +332,10 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       }
 
       const task = rows[0];
-      if (task.status !== "draft" && task.status !== "cancelled") {
-        throw new BadRequestError(
-          `Cannot delete task with status '${task.status}'. Only draft or cancelled tasks can be deleted.`,
-        );
-      }
 
+      // Delete related records first to avoid FK constraint violations
+      await db.delete(taskCommentsTable).where(eq(taskCommentsTable.taskId, id));
+      await db.delete(taskProgressLogTable).where(eq(taskProgressLogTable.taskId, id));
       await db.delete(tasksTable).where(eq(tasksTable.id, id));
 
       logger.info(
@@ -346,6 +344,17 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       );
 
       res.json({ ok: true, deleted: id });
+    }),
+  );
+
+  // ── POST /tasks/resend-pending — Re-send SSE task_assigned for all pending tasks ──
+  router.post(
+    "/tasks/resend-pending",
+    requireAuth, requireAdmin,
+    asyncHandler(async (_req: Request, res: Response) => {
+      const service = new TasksService();
+      const results = await service.resendPendingTaskEvents();
+      res.json({ ok: true, ...results });
     }),
   );
 

@@ -132,8 +132,12 @@ export function TaskDetail() {
 
   async function handleDelete() {
     if (!id) return;
-    await deleteTask.mutateAsync(id);
-    navigate('/tasks');
+    try {
+      await deleteTask.mutateAsync(id);
+      navigate('/tasks');
+    } catch (err) {
+      alert((err as Error).message ?? 'Failed to delete task');
+    }
   }
 
   // Expense lifecycle state

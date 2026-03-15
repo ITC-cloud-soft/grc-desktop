@@ -176,7 +176,7 @@ export function TaskStatsPage() {
 
         <div className="stat-card">
           <div className="stat-value">
-            {stats.avgCompletionDays.toFixed(1)}
+            {(Number(stats.avgCompletionDays) || 0).toFixed(1)}
             <span style={{ fontSize: '0.6em', marginLeft: '2px' }}>d</span>
           </div>
           <div className="stat-label">{t('stats.avgCompletionTime')}</div>

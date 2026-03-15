@@ -38,6 +38,29 @@
       "version": "バージョン",
       "lastSeen": "最終確認",
       "status": "ステータス"
+    },
+    "displayName": "表示名",
+    "employeeId": "従業員ID",
+    "employee": "従業員",
+    "email": "メール",
+    "genes": "遺伝子",
+    "capsules": "カプセル",
+    "registered": "登録日",
+    "activeOf": "{{active}} 件アクティブ / 全 {{total}} 件",
+    "noNodes": "登録されたノードはありません。",
+    "delete": {
+      "title": "ノードを削除",
+      "button": "削除",
+      "buttonDeleting": "削除中...",
+      "cancel": "キャンセル",
+      "warningTitle": "この操作は取り消せません。",
+      "warningDescription": "ノードおよび関連する従業員レコードが完全に削除されます。",
+      "nodeId": "ノードID",
+      "displayName": "表示名",
+      "employee": "従業員",
+      "role": "ロール",
+      "platform": "プラットフォーム",
+      "failedToDelete": "削除に失敗しました：{{error}}"
     }
   },
   "pipeline": {

@@ -38,6 +38,29 @@
       "version": "版本",
       "lastSeen": "最后在线",
       "status": "状态"
+    },
+    "displayName": "显示名称",
+    "employeeId": "员工 ID",
+    "employee": "员工",
+    "email": "邮箱",
+    "genes": "基因",
+    "capsules": "胶囊",
+    "registered": "注册时间",
+    "activeOf": "{{active}} 个在线，共 {{total}} 个",
+    "noNodes": "暂无注册节点。",
+    "delete": {
+      "title": "删除节点",
+      "button": "删除",
+      "buttonDeleting": "删除中...",
+      "cancel": "取消",
+      "warningTitle": "此操作不可撤销。",
+      "warningDescription": "该节点及其关联的员工记录将被永久删除。",
+      "nodeId": "节点 ID",
+      "displayName": "显示名称",
+      "employee": "员工",
+      "role": "角色",
+      "platform": "平台",
+      "failedToDelete": "删除失败：{{error}}"
     }
   },
   "pipeline": {

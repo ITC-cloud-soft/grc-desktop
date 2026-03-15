@@ -99,8 +99,8 @@ export function OrgChart() {
           <div className="stat-label">Online</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{roles.length}</div>
-          <div className="stat-label">Role Templates</div>
+          <div className="stat-value">{sortedRoleIds.length}</div>
+          <div className="stat-label">Assigned Roles</div>
         </div>
         <div className="stat-card">
           <div className="stat-value text-warning">{unassigned.length}</div>

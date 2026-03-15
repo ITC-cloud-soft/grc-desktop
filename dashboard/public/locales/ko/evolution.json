@@ -38,6 +38,29 @@
       "version": "버전",
       "lastSeen": "마지막 확인",
       "status": "상태"
+    },
+    "displayName": "표시 이름",
+    "employeeId": "직원 ID",
+    "employee": "직원",
+    "email": "이메일",
+    "genes": "유전자",
+    "capsules": "캡슐",
+    "registered": "등록일",
+    "activeOf": "{{active}}개 활성 / 총 {{total}}개",
+    "noNodes": "등록된 노드가 없습니다.",
+    "delete": {
+      "title": "노드 삭제",
+      "button": "삭제",
+      "buttonDeleting": "삭제 중...",
+      "cancel": "취소",
+      "warningTitle": "이 작업은 되돌릴 수 없습니다.",
+      "warningDescription": "노드 및 관련 직원 레코드가 영구적으로 삭제됩니다.",
+      "nodeId": "노드 ID",
+      "displayName": "표시 이름",
+      "employee": "직원",
+      "role": "역할",
+      "platform": "플랫폼",
+      "failedToDelete": "삭제 실패: {{error}}"
     }
   },
   "pipeline": {

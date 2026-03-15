@@ -21,7 +21,7 @@
     "a2aAgents": "A2A 에이전트",
     "meetings": "회의",
     "relay": "릴레이",
-    "platform": "플랫폼"
+    "platform": "조직"
   },
   "items": {
     "users": "사용자",
@@ -53,7 +53,7 @@
     "createMeeting": "회의 생성",
     "autoTriggers": "자동 트리거",
     "relayLog": "릴레이 로그",
-    "values": "설정값"
+    "values": "조직 가치관"
   },
   "footer": {
     "settings": "설정",

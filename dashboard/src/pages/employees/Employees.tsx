@@ -46,7 +46,9 @@ export function Employees() {
   const [selectedMode, setSelectedMode] = useState<'autonomous' | 'copilot'>('autonomous');
 
   const filtered = roleFilter
-    ? employees.filter(e => e.roleId === roleFilter)
+    ? roleFilter === '__unassigned__'
+      ? employees.filter(e => !e.roleId)
+      : employees.filter(e => e.roleId === roleFilter)
     : employees;
 
   type EmpRow = typeof employees[0];

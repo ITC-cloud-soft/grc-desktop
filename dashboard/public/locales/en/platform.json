@@ -1,11 +1,11 @@
 {
-  "title": "Platform Values",
-  "subtitle": "Core platform configuration values",
+  "title": "Organization Values",
+  "subtitle": "Core organization culture and values",
   "table": {
     "key": "Key",
     "value": "Value",
     "description": "Description",
     "updated": "Updated"
   },
-  "noValues": "No platform values configured."
+  "noValues": "No organization values configured."
 }

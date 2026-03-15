@@ -21,7 +21,7 @@
     "a2aAgents": "A2A エージェント",
     "meetings": "会議",
     "relay": "リレー",
-    "platform": "プラットフォーム"
+    "platform": "組織"
   },
   "items": {
     "users": "ユーザー",
@@ -53,7 +53,7 @@
     "createMeeting": "会議作成",
     "autoTriggers": "自動トリガー",
     "relayLog": "リレーログ",
-    "values": "設定値"
+    "values": "組織バリュー"
   },
   "footer": {
     "settings": "設定",

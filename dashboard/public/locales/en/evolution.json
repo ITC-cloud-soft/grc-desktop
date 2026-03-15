@@ -38,6 +38,29 @@
       "version": "Version",
       "lastSeen": "Last Seen",
       "status": "Status"
+    },
+    "displayName": "Display Name",
+    "employeeId": "Employee ID",
+    "employee": "Employee",
+    "email": "Email",
+    "genes": "Genes",
+    "capsules": "Capsules",
+    "registered": "Registered",
+    "activeOf": "{{active}} active of {{total}} total",
+    "noNodes": "No nodes registered.",
+    "delete": {
+      "title": "Delete Node",
+      "button": "Delete",
+      "buttonDeleting": "Deleting...",
+      "cancel": "Cancel",
+      "warningTitle": "This action cannot be undone.",
+      "warningDescription": "The node and its associated employee record will be permanently removed.",
+      "nodeId": "Node ID",
+      "displayName": "Display Name",
+      "employee": "Employee",
+      "role": "Role",
+      "platform": "Platform",
+      "failedToDelete": "Failed to delete: {{error}}"
     }
   },
   "pipeline": {

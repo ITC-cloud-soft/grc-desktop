@@ -5,9 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3200,
+    allowedHosts: ['postarterial-holstered-beata.ngrok-free.dev'],
     proxy: {
       '/api': 'http://localhost:3100',
       '/auth': 'http://localhost:3100',
+      '/a2a': 'http://localhost:3100',
     },
   },
   build: {

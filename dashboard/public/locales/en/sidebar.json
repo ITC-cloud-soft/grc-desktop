@@ -21,7 +21,7 @@
     "a2aAgents": "A2A Agents",
     "meetings": "Meetings",
     "relay": "Relay",
-    "platform": "Platform"
+    "platform": "Organization"
   },
   "items": {
     "users": "Users",
@@ -53,7 +53,7 @@
     "createMeeting": "Create Meeting",
     "autoTriggers": "Auto Triggers",
     "relayLog": "Relay Log",
-    "values": "Values"
+    "values": "Organization Values"
   },
   "footer": {
     "settings": "Settings",

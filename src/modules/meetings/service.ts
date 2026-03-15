@@ -20,6 +20,8 @@ import {
   NotFoundError,
 } from "../../shared/middleware/error-handler.js";
 import { sseManager } from "./sse-manager.js";
+import { nodeConfigSSE } from "../evolution/node-config-sse.js";
+import type { MeetingSSEEvent } from "../evolution/node-config-sse.js";
 
 const logger = pino({ name: "module:meetings:service" });
 
@@ -85,6 +87,30 @@ export class MeetingService {
     }
 
     logger.info({ sessionId: id, title: data.title }, "Meeting created");
+
+    // Push SSE meeting_invite to all participants
+    if (data.participants && data.participants.length > 0) {
+      const meetingEvent: MeetingSSEEvent = {
+        event_type: "meeting_invite",
+        session_id: id,
+        title: data.title,
+        type: data.type ?? "discussion",
+        shared_context: data.sharedContext,
+        facilitator_node_id: data.facilitatorNodeId,
+        participants: data.participants.map((p) => ({
+          node_id: p.nodeId,
+          role_id: p.roleId,
+          display_name: p.displayName,
+        })),
+      };
+      for (const p of data.participants) {
+        nodeConfigSSE.pushMeetingEvent(p.nodeId, meetingEvent);
+      }
+      logger.info(
+        { sessionId: id, participantCount: data.participants.length },
+        "Meeting invite SSE pushed to participants",
+      );
+    }
 
     return this.getMeeting(id);
   }

@@ -11,8 +11,18 @@ import pino from "pino";
 
 const logger = pino({ name: "module:evolution:node-config-sse" });
 
+export interface MeetingSSEEvent {
+  event_type: "meeting_invite" | "meeting_started" | "meeting_message";
+  session_id: string;
+  title: string;
+  type: string;
+  shared_context?: string;
+  facilitator_node_id?: string;
+  participants?: { node_id: string; role_id: string; display_name: string }[];
+}
+
 export interface TaskSSEEvent {
-  event_type: "task_assigned" | "task_feedback" | "task_completed";
+  event_type: "task_assigned" | "task_feedback" | "task_completed" | "task_approved";
   task_id: string;
   task_code: string;
   title: string;
@@ -142,6 +152,33 @@ class NodeConfigSSEManager {
     logger.info(
       { nodeId, eventType: event.event_type, taskId: event.task_id, taskCode: event.task_code, clients: nodeConns.size },
       "Task event pushed to node",
+    );
+    return true;
+  }
+
+  /**
+   * Push a meeting event to a specific node via SSE.
+   */
+  pushMeetingEvent(nodeId: string, event: MeetingSSEEvent): boolean {
+    const nodeConns = this.connections.get(nodeId);
+    if (!nodeConns || nodeConns.size === 0) {
+      logger.debug({ nodeId }, "No SSE connections for node — skipping meeting event push");
+      return false;
+    }
+
+    const payload = `event: meeting_event\ndata: ${JSON.stringify(event)}\n\n`;
+
+    for (const res of nodeConns) {
+      try {
+        res.write(payload);
+      } catch {
+        nodeConns.delete(res);
+      }
+    }
+
+    logger.info(
+      { nodeId, eventType: event.event_type, sessionId: event.session_id, clients: nodeConns.size },
+      "Meeting event pushed to node",
     );
     return true;
   }

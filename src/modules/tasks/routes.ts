@@ -108,8 +108,16 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
       // Verify the requesting node is either the assignee or the creator
       const task = await service.getTask(body.task_id);
-      const isAssignee = task.assignedNodeId === body.node_id;
+      let isAssignee = task.assignedNodeId === body.node_id;
       const isCreator = task.creatorNodeId === body.node_id;
+
+      // Role-based assignment: if no specific node assigned, check if node's role matches
+      if (!isAssignee && !task.assignedNodeId && task.assignedRoleId) {
+        const nodeRole = await service.getNodeRoleId(body.node_id);
+        if (nodeRole && nodeRole === task.assignedRoleId) {
+          isAssignee = true;
+        }
+      }
 
       if (!isAssignee && !isCreator) {
         throw new BadRequestError(
@@ -124,6 +132,22 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         if (!creatorAllowedStatuses.includes(body.status)) {
           throw new BadRequestError(
             `Creator node can only set status to: ${creatorAllowedStatuses.join(", ")}`,
+          );
+        }
+      }
+
+      // Self-review prevention: if the same node is both creator and assignee,
+      // it cannot approve its own work — must be reviewed by a superior (e.g., CEO).
+      // Exception: if the node is the assignee due to review handoff (creator assigned
+      // the task to another role/node, and it was reassigned back to creator for review),
+      // then approval is allowed — the creator is acting as reviewer, not self-reviewing.
+      if (isAssignee && isCreator && body.status === "approved" && task.status === "review") {
+        // Check if this is a review handoff (task was assigned to a different role originally)
+        const isReviewHandoff = task.assignedRoleId && task.assignedRoleId !== await service.getNodeRoleId(body.node_id);
+        if (!isReviewHandoff) {
+          throw new BadRequestError(
+            "Self-review not allowed: you cannot approve a task you created and executed. " +
+            "A superior (e.g., CEO) must review and approve this task.",
           );
         }
       }

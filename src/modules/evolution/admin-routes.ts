@@ -350,6 +350,36 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     }),
   );
 
+  // ── DELETE /nodes/:nodeId — Delete a node (admin) ──
+
+  router.delete(
+    "/nodes/:nodeId",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const nodeId = req.params.nodeId as string;
+      const db = getDb();
+
+      const existing = await db
+        .select({ nodeId: nodesTable.nodeId })
+        .from(nodesTable)
+        .where(eq(nodesTable.nodeId, nodeId))
+        .limit(1);
+
+      if (!existing[0]) {
+        throw new NotFoundError("Node");
+      }
+
+      await db.delete(nodesTable).where(eq(nodesTable.nodeId, nodeId));
+
+      logger.info(
+        { nodeId, admin: req.auth?.sub },
+        "Node deleted by admin",
+      );
+
+      res.json({ data: { nodeId, deleted: true } });
+    }),
+  );
+
   // ── GET /reports — List asset reports (admin — internal) ──
 
   router.get(

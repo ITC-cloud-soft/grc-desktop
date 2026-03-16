@@ -21,74 +21,18 @@ interface NavSection {
 }
 
 const NAV_SECTIONS: NavSection[] = [
+  // ── 龙虾节点 ──
   {
-    sectionKey: 'auth',
-    icon: '\u{1F464}',
+    sectionKey: 'lobsterNodes',
+    icon: '\u{1F99E}',
     adminOnly: true,
     items: [
+      { labelKey: 'nodes', path: '/evolution/nodes' },
       { labelKey: 'users', path: '/manage/users' },
-      { labelKey: 'modelKeys', path: '/manage/model-keys' },
-      { labelKey: 'keyDistribute', path: '/manage/model-keys/distribute' },
+      { labelKey: 'insights', path: '/telemetry' },
     ],
   },
-  {
-    sectionKey: 'skills',
-    icon: '\u{1F527}',
-    items: [
-      { labelKey: 'skillList', path: '/skills' },
-      { labelKey: 'skillStats', path: '/skills/stats' },
-    ],
-  },
-  {
-    sectionKey: 'evolution',
-    icon: '\u{1F9EC}',
-    items: [
-      { labelKey: 'assets', path: '/evolution/assets' },
-      { labelKey: 'nodes', path: '/evolution/nodes', adminOnly: true },
-      { labelKey: 'pipeline', path: '/evolution/pipeline', adminOnly: true },
-    ],
-  },
-  {
-    sectionKey: 'update',
-    icon: '\u{1F504}',
-    items: [
-      { labelKey: 'releases', path: '/update/releases' },
-      { labelKey: 'updateStats', path: '/update/stats' },
-    ],
-  },
-  {
-    sectionKey: 'telemetry',
-    icon: '\u{1F4CA}',
-    items: [{ labelKey: 'insights', path: '/telemetry' }],
-  },
-  {
-    sectionKey: 'community',
-    icon: '\u{1F4AC}',
-    items: [
-      { labelKey: 'channels', path: '/community/channels' },
-      { labelKey: 'topics', path: '/community/topics' },
-      { labelKey: 'moderation', path: '/community/moderation', adminOnly: true },
-    ],
-  },
-  {
-    sectionKey: 'employees',
-    icon: '\u{1F465}',
-    adminOnly: true,
-    items: [
-      { labelKey: 'employeeList', path: '/employees' },
-      { labelKey: 'orgChart', path: '/employees/org' },
-    ],
-  },
-  {
-    sectionKey: 'roles',
-    icon: '\u{1F3AD}',
-    adminOnly: true,
-    items: [
-      { labelKey: 'roleTemplates', path: '/roles' },
-      { labelKey: 'createRole', path: '/roles/create' },
-      { labelKey: 'aiWizard', path: '/roles/create-wizard', adminOnly: true },
-    ],
-  },
+  // ── 任务 ──
   {
     sectionKey: 'tasks',
     icon: '\u{1F4CB}',
@@ -99,22 +43,7 @@ const NAV_SECTIONS: NavSection[] = [
       { labelKey: 'expenses', path: '/tasks/expenses' },
     ],
   },
-  {
-    sectionKey: 'strategy',
-    icon: '\u{1F3AF}',
-    adminOnly: true,
-    items: [
-      { labelKey: 'strategy', path: '/strategy' },
-    ],
-  },
-  {
-    sectionKey: 'a2aAgents',
-    icon: '\u{1F916}',
-    adminOnly: true,
-    items: [
-      { labelKey: 'agentCards', path: '/a2a/agents' },
-    ],
-  },
+  // ── 会议 ──
   {
     sectionKey: 'meetings',
     icon: '\u{1F91D}',
@@ -125,19 +54,81 @@ const NAV_SECTIONS: NavSection[] = [
       { labelKey: 'autoTriggers', path: '/meetings/triggers' },
     ],
   },
-  {
-    sectionKey: 'relay',
-    icon: '\u{1F4E8}',
-    adminOnly: true,
-    items: [
-      { labelKey: 'relayLog', path: '/relay' },
-    ],
-  },
+  // ── 组织 (含组织价值观 + 战略) ──
   {
     sectionKey: 'platform',
     icon: '\u{2728}',
     items: [
       { labelKey: 'values', path: '/platform/values' },
+      { labelKey: 'strategy', path: '/strategy', adminOnly: true },
+    ],
+  },
+  // ── 角色 ──
+  {
+    sectionKey: 'roles',
+    icon: '\u{1F3AD}',
+    adminOnly: true,
+    items: [
+      { labelKey: 'roleTemplates', path: '/roles' },
+      { labelKey: 'createRole', path: '/roles/create' },
+      { labelKey: 'aiWizard', path: '/roles/create-wizard', adminOnly: true },
+    ],
+  },
+  // ── 员工 ──
+  {
+    sectionKey: 'employees',
+    icon: '\u{1F465}',
+    adminOnly: true,
+    items: [
+      { labelKey: 'employeeList', path: '/employees' },
+      { labelKey: 'orgChart', path: '/employees/org' },
+    ],
+  },
+  // ── 技能 ──
+  {
+    sectionKey: 'skills',
+    icon: '\u{1F527}',
+    items: [
+      { labelKey: 'skillList', path: '/skills' },
+      { labelKey: 'skillStats', path: '/skills/stats' },
+    ],
+  },
+  // ── 进化 ──
+  {
+    sectionKey: 'evolution',
+    icon: '\u{1F9EC}',
+    items: [
+      { labelKey: 'assets', path: '/evolution/assets' },
+      { labelKey: 'pipeline', path: '/evolution/pipeline', adminOnly: true },
+    ],
+  },
+  // ── 社区 ──
+  {
+    sectionKey: 'community',
+    icon: '\u{1F4AC}',
+    items: [
+      { labelKey: 'channels', path: '/community/channels' },
+      { labelKey: 'topics', path: '/community/topics' },
+      { labelKey: 'moderation', path: '/community/moderation', adminOnly: true },
+    ],
+  },
+  // ── 更新 ──
+  {
+    sectionKey: 'update',
+    icon: '\u{1F504}',
+    items: [
+      { labelKey: 'releases', path: '/update/releases' },
+      { labelKey: 'updateStats', path: '/update/stats' },
+    ],
+  },
+  // ── 密钥管理 ──
+  {
+    sectionKey: 'auth',
+    icon: '\u{1F511}',
+    adminOnly: true,
+    items: [
+      { labelKey: 'modelKeys', path: '/manage/model-keys' },
+      { labelKey: 'keyDistribute', path: '/manage/model-keys/distribute' },
     ],
   },
 ];

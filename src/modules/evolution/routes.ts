@@ -24,9 +24,13 @@ import {
   a2aSearchSchema,
   nodeIdSchema,
 } from "../../shared/utils/validators.js";
+import { eq } from "drizzle-orm";
+import { getDb } from "../../shared/db/connection.js";
 import { EvolutionService, upsertNode } from "./service.js";
+import { nodesTable } from "./schema.js";
 import { nodeConfigSSE } from "./node-config-sse.js";
 import { RolesService } from "../roles/service.js";
+import { AuthService } from "../auth/service.js";
 
 const logger = pino({ name: "module:evolution" });
 
@@ -68,6 +72,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   const router = Router();
   const service = new EvolutionService();
   const rolesService = new RolesService();
+  const authService = new AuthService(config);
   const authOptional = createAuthMiddleware(config, false);
   const authRequired = createAuthMiddleware(config, true);
   const adminAuth = createAdminAuthMiddleware(config);
@@ -92,6 +97,17 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         employeeName: body.employee_name,
         employeeEmail: body.employee_email,
       });
+
+      // Auto-link node to a user record
+      const nodeUser = await authService.upsertNodeUser({
+        nodeId: body.node_id,
+        displayName: body.employee_name,
+        email: body.employee_email,
+      });
+      await getDb()
+        .update(nodesTable)
+        .set({ userId: nodeUser.id })
+        .where(eq(nodesTable.nodeId, body.node_id));
 
       logger.debug({ nodeId: body.node_id }, "Hello received");
 
@@ -125,6 +141,17 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         employeeName: body.employee_name,
         employeeEmail: body.employee_email,
       });
+
+      // Auto-link node to a user record
+      const nodeUser = await authService.upsertNodeUser({
+        nodeId: body.node_id,
+        displayName: body.employee_name,
+        email: body.employee_email,
+      });
+      await getDb()
+        .update(nodesTable)
+        .set({ userId: nodeUser.id })
+        .where(eq(nodesTable.nodeId, body.node_id));
 
       // Check if there's a pending config update — push it inline
       let pendingConfig = null;

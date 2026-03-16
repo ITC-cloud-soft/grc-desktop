@@ -53,7 +53,7 @@ export function Insights() {
           loading={isLoading}
         />
         <StatCard
-          title="Platforms Tracked"
+          title={t('stats.platformsTracked')}
           value={Object.keys(data?.stats.platformDistribution ?? {}).length}
           icon="✅"
           color="#06d6a0"
@@ -89,7 +89,7 @@ export function Insights() {
             data={versionData}
             xKey="name"
             yKey="value"
-            title="Version Distribution"
+            title={t('charts.versionDistribution')}
             height={260}
           />
         </div>

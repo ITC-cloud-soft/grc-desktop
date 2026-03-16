@@ -1,15 +1,17 @@
 {
-  "title": "テレメトリーインサイト",
-  "subtitle": "システムテレメトリーとヘルス分析",
+  "title": "テレメトリー概要",
+  "subtitle": "システム利用状況と稼働分析",
   "stats": {
-    "uniqueNodes": "ユニークノード",
-    "totalReports": "総レポート数",
+    "uniqueNodes": "接続ノード数",
+    "totalReports": "累計レポート数",
+    "platformsTracked": "対応プラットフォーム数",
     "avgCpuUsage": "平均CPU使用率",
     "avgMemoryUsage": "平均メモリ使用率"
   },
   "charts": {
-    "dailyReports": "日次レポート",
+    "dailyReports": "日次レポート推移",
     "platformBreakdown": "プラットフォーム別内訳",
+    "versionDistribution": "バージョン分布",
     "healthDistribution": "ヘルス分布"
   }
 }

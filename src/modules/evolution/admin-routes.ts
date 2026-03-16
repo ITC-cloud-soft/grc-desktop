@@ -22,6 +22,8 @@ import {
   nodesTable,
   assetReportsTable,
 } from "./schema.js";
+import { users } from "../auth/schema.js";
+import { AuthService } from "../auth/service.js";
 
 const logger = pino({ name: "admin:evolution" });
 
@@ -49,6 +51,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
   const router = Router();
   const requireAuth = createAuthMiddleware(config);
   const requireAdmin = createAdminAuthMiddleware(config);
+  const authService = new AuthService(config);
 
   // ── GET /assets — List all genes+capsules (auth only — browsing) ──
 
@@ -454,6 +457,17 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
               workspacePath: body.workspacePath,
             })
             .where(eq(nodesTable.nodeId, nodeId));
+
+          // Auto-link node to a user record
+          const nodeUser = await authService.upsertNodeUser({
+            nodeId,
+            displayName: body.employeeName,
+            email: body.employeeEmail,
+          });
+          await db
+            .update(nodesTable)
+            .set({ userId: nodeUser.id })
+            .where(eq(nodesTable.nodeId, nodeId));
         }
 
         logger.info({ containerId, nodeId, gatewayUrl }, "Local Docker node provisioned");
@@ -602,6 +616,18 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
               gatewayUrl,
             })
             .where(eq(nodesTable.nodeId, nodeId));
+
+          // Auto-link node to a user record
+          const nodeUser = await authService.upsertNodeUser({
+            nodeId,
+            displayName: body.employeeName,
+            email: body.employeeEmail,
+          });
+          await db
+            .update(nodesTable)
+            .set({ userId: nodeUser.id })
+            .where(eq(nodesTable.nodeId, nodeId));
+
           logger.info({ sandboxId, nodeId, gatewayUrl }, "Daytona sandbox node provisioned and linked");
         } else {
           logger.warn({ sandboxId }, "WinClaw node did not register within timeout, sandbox created but not linked");
@@ -874,7 +900,18 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       }
       // For regular PC nodes (provisioningMode = null), only GRC data is deleted
 
+      // Capture userId before deleting the node
+      const nodeUserId = node.userId;
+
       await db.delete(nodesTable).where(eq(nodesTable.nodeId, nodeId));
+
+      // CASCADE: delete the associated node-provider user (if any)
+      if (nodeUserId) {
+        await db
+          .delete(users)
+          .where(and(eq(users.id, nodeUserId), eq(users.provider, "node")));
+        logger.info({ userId: nodeUserId }, "Associated node user deleted");
+      }
 
       logger.info(
         { nodeId, admin: req.auth?.sub },

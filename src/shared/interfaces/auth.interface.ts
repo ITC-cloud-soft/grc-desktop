@@ -7,7 +7,7 @@
 
 export interface IAuthUser {
   id: string;
-  provider: "github" | "google" | "anonymous" | "email";
+  provider: "github" | "google" | "anonymous" | "email" | "node";
   providerId: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -66,6 +66,13 @@ export interface IAuthService {
     providerId: string;
     displayName: string;
     avatarUrl?: string;
+    email?: string;
+  }): Promise<IAuthUser>;
+
+  /** Create or update a node-provider user linked to a nodeId */
+  upsertNodeUser(params: {
+    nodeId: string;
+    displayName?: string;
     email?: string;
   }): Promise<IAuthUser>;
 

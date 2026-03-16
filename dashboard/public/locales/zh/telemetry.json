@@ -1,15 +1,17 @@
 {
-  "title": "遥测洞察",
-  "subtitle": "系统遥测与健康分析",
+  "title": "遥测概览",
+  "subtitle": "系统使用情况与运行状态分析",
   "stats": {
-    "uniqueNodes": "唯一节点",
-    "totalReports": "报告总数",
+    "uniqueNodes": "接入节点数",
+    "totalReports": "累计报告数",
+    "platformsTracked": "覆盖平台数",
     "avgCpuUsage": "平均 CPU 使用率",
     "avgMemoryUsage": "平均内存使用率"
   },
   "charts": {
-    "dailyReports": "每日报告",
-    "platformBreakdown": "平台细分",
-    "healthDistribution": "健康分布"
+    "dailyReports": "每日报告趋势",
+    "platformBreakdown": "平台分布",
+    "versionDistribution": "版本分布",
+    "healthDistribution": "健康状态分布"
   }
 }

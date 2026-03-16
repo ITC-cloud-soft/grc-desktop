@@ -2,14 +2,16 @@
   "title": "Telemetry Insights",
   "subtitle": "System telemetry and health analytics",
   "stats": {
-    "uniqueNodes": "Unique Nodes",
+    "uniqueNodes": "Active Nodes",
     "totalReports": "Total Reports",
+    "platformsTracked": "Platforms Tracked",
     "avgCpuUsage": "Avg CPU Usage",
     "avgMemoryUsage": "Avg Memory Usage"
   },
   "charts": {
     "dailyReports": "Daily Reports",
     "platformBreakdown": "Platform Breakdown",
+    "versionDistribution": "Version Distribution",
     "healthDistribution": "Health Distribution"
   }
 }

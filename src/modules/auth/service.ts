@@ -196,6 +196,59 @@ export class AuthService implements IAuthService {
     return created!;
   }
 
+  async upsertNodeUser(params: {
+    nodeId: string;
+    displayName?: string;
+    email?: string;
+  }): Promise<IAuthUser> {
+    const db = getDb();
+
+    // Check if a node-provider user already exists for this nodeId
+    const existing = await this.getUserByProvider("node", params.nodeId);
+
+    if (existing) {
+      // Update displayName/email if provided
+      const updates: Record<string, string> = {};
+      if (params.displayName !== undefined) updates.displayName = params.displayName;
+      if (params.email !== undefined) updates.email = params.email;
+
+      if (Object.keys(updates).length > 0) {
+        await db
+          .update(users)
+          .set(updates)
+          .where(eq(users.id, existing.id));
+      }
+
+      logger.info(
+        { userId: existing.id, nodeId: params.nodeId },
+        "Node user updated",
+      );
+
+      const updated = await this.getUserById(existing.id);
+      return updated!;
+    }
+
+    // Insert new node-provider user
+    const id = uuidv4();
+    await db.insert(users).values({
+      id,
+      provider: "node",
+      providerId: params.nodeId,
+      displayName: params.displayName ?? `node-${params.nodeId.slice(0, 8)}`,
+      email: params.email ?? null,
+      tier: "free",
+      role: "user",
+    });
+
+    logger.info(
+      { userId: id, nodeId: params.nodeId },
+      "New node user created",
+    );
+
+    const created = await this.getUserById(id);
+    return created!;
+  }
+
   async registerAnonymous(nodeId: string): Promise<IAuthUser> {
     const db = getDb();
 

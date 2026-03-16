@@ -22,6 +22,8 @@ import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { nodeIdSchema } from "../../shared/utils/validators.js";
 import { getDb } from "../../shared/db/connection.js";
 import { a2aRelayQueueTable } from "./schema.js";
+import { nodeConfigSSE } from "../evolution/node-config-sse.js";
+import type { RelaySSEEvent } from "../evolution/node-config-sse.js";
 
 const logger = pino({ name: "module:relay" });
 
@@ -81,15 +83,40 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         expiresAt: body.expires_at ? new Date(body.expires_at) : null,
       });
 
+      // SSE instant push if target node is online
+      let deliveredViaSSE = false;
+      if (nodeConfigSSE.isNodeConnected(body.to_node_id)) {
+        const sseEvent: RelaySSEEvent = {
+          event_type: "relay_message",
+          message_id: id,
+          from_node_id: body.from_node_id,
+          message_type: body.message_type,
+          subject: body.subject,
+          payload: body.payload,
+          priority: body.priority,
+          created_at: new Date().toISOString(),
+        };
+
+        deliveredViaSSE = nodeConfigSSE.pushRelayEvent(body.to_node_id, sseEvent);
+
+        if (deliveredViaSSE) {
+          await db
+            .update(a2aRelayQueueTable)
+            .set({ status: "delivered", deliveredAt: new Date() })
+            .where(eq(a2aRelayQueueTable.id, id));
+        }
+      }
+
       logger.debug(
-        { id, from: body.from_node_id, to: body.to_node_id, type: body.message_type },
+        { id, from: body.from_node_id, to: body.to_node_id, type: body.message_type, sseDelivered: deliveredViaSSE },
         "Relay message queued",
       );
 
       res.status(201).json({
         ok: true,
         message_id: id,
-        status: "queued",
+        status: deliveredViaSSE ? "delivered" : "queued",
+        delivered_via_sse: deliveredViaSSE,
       });
     }),
   );
@@ -196,6 +223,18 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         })
         .where(eq(a2aRelayQueueTable.id, body.message_id));
 
+      // Notify sender that message was read
+      if (message.fromNodeId) {
+        if (nodeConfigSSE.isNodeConnected(message.fromNodeId)) {
+          nodeConfigSSE.pushRelayEvent(message.fromNodeId, {
+            event_type: "message_read",
+            message_id: body.message_id,
+            read_by: body.node_id,
+            read_at: new Date().toISOString(),
+          });
+        }
+      }
+
       logger.debug(
         { messageId: body.message_id, nodeId: body.node_id },
         "Message acknowledged",
@@ -209,8 +248,157 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
     }),
   );
 
+  // ────────────────────────────────────────────
+  // POST /a2a/relay/broadcast — Send message to all agents or filtered by role
+  // ────────────────────────────────────────────
+  const relayBroadcastSchema = z.object({
+    from_node_id: nodeIdSchema,
+    message_type: z
+      .enum(["text", "directive", "report", "broadcast"])
+      .default("broadcast"),
+    subject: z.string().max(500),
+    payload: z.record(z.unknown()),
+    priority: z.enum(["critical", "high", "normal", "low"]).default("normal"),
+    target_roles: z.array(z.string()).optional(),
+    exclude_self: z.boolean().default(true),
+  });
+
+  router.post(
+    "/relay/broadcast",
+    authRequired,
+    rateLimitMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = relayBroadcastSchema.parse(req.body);
+      const db = getDb();
+
+      // Get all agent cards to find target nodes
+      const { AgentCardService } = await import("../a2a-gateway/service.js");
+      const agentService = new AgentCardService();
+      const allAgents = await agentService.listAgentCards();
+
+      let targets = allAgents;
+
+      // Filter by roles if specified
+      if (body.target_roles && body.target_roles.length > 0) {
+        targets = targets.filter((a) => {
+          const roleId = (a.agentCard as Record<string, unknown>)?.role_id as string | undefined;
+          return roleId && body.target_roles!.includes(roleId);
+        });
+      }
+
+      // Exclude sender
+      if (body.exclude_self) {
+        targets = targets.filter((a) => a.nodeId !== body.from_node_id);
+      }
+
+      // Send to each target via relay queue + SSE
+      const results: Array<{
+        node_id: string;
+        message_id: string;
+        delivered_via_sse: boolean;
+      }> = [];
+
+      for (const target of targets) {
+        const msgId = uuidv4();
+        const now = new Date();
+
+        await db.insert(a2aRelayQueueTable).values({
+          id: msgId,
+          fromNodeId: body.from_node_id,
+          toNodeId: target.nodeId,
+          messageType: body.message_type,
+          subject: body.subject,
+          payload: body.payload,
+          priority: body.priority,
+          status: "queued",
+          expiresAt: null,
+        });
+
+        // Try SSE push
+        let deliveredViaSSE = false;
+        const { nodeConfigSSE } = await import("../evolution/node-config-sse.js");
+        if (nodeConfigSSE.isNodeConnected(target.nodeId)) {
+          deliveredViaSSE = nodeConfigSSE.pushRelayEvent(target.nodeId, {
+            event_type: "relay_message",
+            message_id: msgId,
+            from_node_id: body.from_node_id,
+            message_type: body.message_type,
+            subject: body.subject,
+            payload: body.payload,
+            priority: body.priority,
+            created_at: now.toISOString(),
+          });
+
+          if (deliveredViaSSE) {
+            await db
+              .update(a2aRelayQueueTable)
+              .set({ status: "delivered", deliveredAt: now })
+              .where(eq(a2aRelayQueueTable.id, msgId));
+          }
+        }
+
+        results.push({
+          node_id: target.nodeId,
+          message_id: msgId,
+          delivered_via_sse: deliveredViaSSE,
+        });
+      }
+
+      res.status(201).json({
+        ok: true,
+        broadcast_summary: {
+          total_recipients: results.length,
+          delivered_immediately: results.filter((r) => r.delivered_via_sse).length,
+          queued_for_later: results.filter((r) => !r.delivered_via_sse).length,
+        },
+        results,
+      });
+    }),
+  );
+
+  // ────────────────────────────────────────────
+  // GET /a2a/relay/status/:messageId — Get delivery status of a message
+  // ────────────────────────────────────────────
+  router.get(
+    "/relay/status/:messageId",
+    authRequired,
+    asyncHandler(async (req: Request, res: Response) => {
+      const messageId = z.string().uuid().parse(req.params.messageId);
+      const db = getDb();
+
+      const rows = await db
+        .select()
+        .from(a2aRelayQueueTable)
+        .where(eq(a2aRelayQueueTable.id, messageId))
+        .limit(1);
+
+      if (rows.length === 0) {
+        throw new NotFoundError("Message");
+      }
+
+      const msg = rows[0];
+
+      res.json({
+        ok: true,
+        message_id: msg.id,
+        status: msg.status,
+        from_node_id: msg.fromNodeId,
+        to_node_id: msg.toNodeId,
+        message_type: msg.messageType,
+        priority: msg.priority,
+        timeline: {
+          queued_at: msg.createdAt,
+          delivered_at: msg.deliveredAt,
+          acknowledged_at: msg.acknowledgedAt,
+          expires_at: msg.expiresAt,
+        },
+        recipient_sse_connected: nodeConfigSSE.isNodeConnected(msg.toNodeId),
+      });
+    }),
+  );
+
   // ── Mount router under /a2a prefix ────────
   app.use("/a2a", router);
 
-  logger.info("Relay module registered — 3 A2A endpoints active");
+  logger.info("Relay module registered — 5 A2A endpoints active");
 }

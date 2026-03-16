@@ -80,6 +80,96 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   const service = new MeetingService();
   const authRequired = createAuthMiddleware(config, true);
 
+  // ────────────────────────────────────────────
+  // POST /a2a/meetings/quick — Quick meeting creation with minimal params
+  // (Must be before /:sessionId to avoid Express matching conflicts)
+  // ────────────────────────────────────────────
+  const quickMeetingSchema = z.object({
+    title: z.string().min(1).max(500),
+    facilitator_node_id: z.string().min(1),
+    created_by: z.string().min(1),
+    participant_roles: z.array(z.string()).optional(),
+    participant_node_ids: z.array(z.string()).optional(),
+    agenda_text: z.string().optional(),
+    type: z.enum(["discussion", "review", "brainstorm", "decision"]).default("discussion"),
+    auto_start: z.boolean().default(true),
+    max_duration_minutes: z.number().int().min(1).max(1440).default(30),
+  });
+
+  router.post(
+    "/quick",
+    authRequired,
+    rateLimitMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = quickMeetingSchema.parse(req.body);
+
+      // Resolve participant_roles to actual nodes
+      let participants: Array<{ nodeId: string; roleId: string; displayName: string }> = [];
+
+      if (body.participant_roles && body.participant_roles.length > 0) {
+        // Dynamic import to avoid circular deps
+        const { getNodesByRoles } = await import("../evolution/role-resolver.js");
+        const resolved = await getNodesByRoles(body.participant_roles);
+        participants = resolved.map((n) => ({
+          nodeId: n.nodeId,
+          roleId: n.roleId ?? "unknown",
+          displayName: n.employeeName ?? n.roleId ?? n.nodeId,
+        }));
+      }
+
+      if (body.participant_node_ids && body.participant_node_ids.length > 0) {
+        for (const nid of body.participant_node_ids) {
+          if (!participants.some((p) => p.nodeId === nid)) {
+            participants.push({ nodeId: nid, roleId: "unknown", displayName: nid });
+          }
+        }
+      }
+
+      // Convert plain text agenda to structured array
+      let agenda: Array<Record<string, unknown>> | undefined;
+      if (body.agenda_text) {
+        agenda = body.agenda_text
+          .split("\n")
+          .filter((line) => line.trim())
+          .map((line, i) => ({
+            index: i,
+            topic: line.trim(),
+            duration_minutes: null,
+          }));
+      }
+
+      // Create meeting
+      const meeting = await service.createMeeting({
+        title: body.title,
+        type: body.type,
+        initiatorType: "agent",
+        facilitatorNodeId: body.facilitator_node_id,
+        maxDurationMinutes: body.max_duration_minutes,
+        agenda,
+        createdBy: body.created_by,
+        participants: participants.length > 0 ? participants : undefined,
+      });
+
+      // Auto-start if requested
+      let finalMeeting = meeting;
+      if (body.auto_start && meeting.status === "scheduled") {
+        finalMeeting = { ...meeting, ...(await service.startMeeting(meeting.id)) };
+      }
+
+      res.status(201).json({
+        ok: true,
+        meeting: finalMeeting,
+        notifications_sent: participants.length,
+        quick_links: {
+          meeting_url: `/a2a/meetings/${meeting.id}`,
+          message_url: `/a2a/meetings/${meeting.id}/message`,
+          stream_url: `/a2a/meetings/${meeting.id}/stream`,
+          close_url: `/a2a/meetings/${meeting.id}/close`,
+        },
+      });
+    }),
+  );
+
   // POST /a2a/meetings — Create a new meeting
   router.post(
     "/",

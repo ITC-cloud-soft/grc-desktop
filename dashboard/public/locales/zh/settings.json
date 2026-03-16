@@ -6,5 +6,52 @@
     "description": "选择您首选的显示语言。界面将立即更新。",
     "current": "当前语言：{{language}}",
     "browserDetected": "从浏览器检测：{{language}}"
+  },
+  "modules": {
+    "title": "功能模块",
+    "description": "启用或关闭功能模块。更改需要重启服务器后生效。",
+    "core": "核心模块",
+    "coreDesc": "始终启用的基础模块。",
+    "optional": "可选模块",
+    "optionalDesc": "根据需求开启或关闭这些模块。",
+    "heavy": "高级模块",
+    "heavyDesc": "这些模块需要 MySQL 和外部服务，SQLite 模式下不可用。",
+    "requiresMysql": "需要 MySQL",
+    "requiresRestart": "更改需要重启服务器后生效。",
+    "enabled": "已启用",
+    "disabled": "已关闭",
+    "locked": "已锁定",
+    "names": {
+      "auth": "用户认证",
+      "strategy": "战略管理",
+      "roles": "角色模板",
+      "platform": "平台价值观",
+      "model-keys": "模型密钥",
+      "relay": "A2A 消息中继",
+      "a2a-gateway": "A2A 网关",
+      "tasks": "任务管理",
+      "meetings": "会议管理",
+      "evolution": "进化池",
+      "clawhub": "技能市场",
+      "community": "社区论坛",
+      "telemetry": "遥测分析",
+      "update": "更新管理"
+    },
+    "descriptions": {
+      "auth": "用户身份认证与会话管理",
+      "strategy": "公司战略、使命、愿景和 KPI 管理",
+      "roles": "Agent 角色模板与 MD 配置文件",
+      "platform": "平台价值观与文化设置",
+      "model-keys": "AI 模型 API 密钥分发与管理",
+      "relay": "节点间 A2A 消息中继队列",
+      "a2a-gateway": "Agent 通信的 A2A 网关协议",
+      "tasks": "任务分配、跟踪和进度记录",
+      "meetings": "多 Agent 会议调度与转写记录",
+      "evolution": "基因/胶囊进化池与生命周期事件",
+      "clawhub": "技能市场，含搜索与下载功能",
+      "community": "讨论论坛，含主题、回复和投票",
+      "telemetry": "节点使用分析与报表",
+      "update": "客户端发布与更新管理"
+    }
   }
 }

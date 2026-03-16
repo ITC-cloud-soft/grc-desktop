@@ -6,5 +6,52 @@
     "description": "表示言語を選択してください。インターフェースはすぐに更新されます。",
     "current": "現在の言語：{{language}}",
     "browserDetected": "ブラウザから検出：{{language}}"
+  },
+  "modules": {
+    "title": "機能モジュール",
+    "description": "機能モジュールの有効/無効を切り替えます。変更はサーバー再起動後に反映されます。",
+    "core": "コアモジュール",
+    "coreDesc": "常に有効な基本モジュールです。",
+    "optional": "オプションモジュール",
+    "optionalDesc": "必要に応じてこれらのモジュールを切り替えられます。",
+    "heavy": "高度なモジュール",
+    "heavyDesc": "これらのモジュールは MySQL と外部サービスが必要です。SQLite モードでは利用できません。",
+    "requiresMysql": "MySQL が必要",
+    "requiresRestart": "変更はサーバー再起動後に反映されます。",
+    "enabled": "有効",
+    "disabled": "無効",
+    "locked": "ロック中",
+    "names": {
+      "auth": "認証",
+      "strategy": "戦略管理",
+      "roles": "ロールテンプレート",
+      "platform": "プラットフォーム価値観",
+      "model-keys": "モデルキー",
+      "relay": "A2A リレー",
+      "a2a-gateway": "A2A ゲートウェイ",
+      "tasks": "タスク管理",
+      "meetings": "会議管理",
+      "evolution": "進化プール",
+      "clawhub": "スキルマーケットプレイス",
+      "community": "コミュニティフォーラム",
+      "telemetry": "テレメトリ分析",
+      "update": "アップデート管理"
+    },
+    "descriptions": {
+      "auth": "ユーザー認証とセッション管理",
+      "strategy": "企業戦略、ミッション、ビジョン、KPI 管理",
+      "roles": "Agent ロールテンプレートと MD 設定",
+      "platform": "プラットフォーム価値観と文化設定",
+      "model-keys": "AI モデル API キーの配布・管理",
+      "relay": "ノード間 A2A メッセージリレーキュー",
+      "a2a-gateway": "Agent 通信用 A2A ゲートウェイプロトコル",
+      "tasks": "タスクの割り当て、追跡、進捗記録",
+      "meetings": "マルチ Agent 会議のスケジューリングと文字起こし",
+      "evolution": "遺伝子/カプセル進化プールとライフサイクルイベント",
+      "clawhub": "スキルマーケットプレイス（検索・ダウンロード）",
+      "community": "ディスカッションフォーラム（トピック・返信・投票）",
+      "telemetry": "ノード使用状況の分析とレポート",
+      "update": "クライアントリリースとアップデート管理"
+    }
   }
 }

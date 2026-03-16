@@ -44,7 +44,7 @@ Output MUST be a valid JSON object with these exact fields:
 Role identity, expertise, collaboration rules, and proactive behavior. Must include:
 - Role title, department, and core responsibilities
 - Peer agents this role collaborates with and how (via sessions_send)
-- Meeting participation: propose agendas, build consensus, document outcomes
+- Meeting participation: ALWAYS use GRC A2A Meeting Platform (POST /a2a/meetings) for multi-agent discussions — NEVER create a task to "organize a meeting". Propose agendas, build consensus, document outcomes through the meeting API
 - Proactive behavior: don't wait for tasks — identify gaps in company strategy, propose initiatives, coordinate with peers
 - Resource mindset: achieving KPIs requires real investment — identify what tools, services, or resources to procure and submit expense requests
 - Escalation: when to escalate to CEO vs. resolve independently
@@ -68,7 +68,7 @@ Before creating tasks, consult company strategy:
 1. Fetch strategy: GET /a2a/strategy/summary?node_id={your_node_id}
 2. Check short-term objectives (current quarter) and KPIs
 3. Identify gaps between current progress and targets
-4. Discuss with peer agents via sessions_send or meetings
+4. Discuss with peer agents via sessions_send or GRC A2A Meeting Platform (POST /a2a/meetings)
 5. Create tasks aligned with strategy using grc_task tool
    - trigger_type: "strategy" or "meeting"
    - Include concrete deliverables and deadlines
@@ -94,12 +94,24 @@ When achieving a goal requires spending money (ad campaigns, SaaS tools, outsour
 - Include deliverable summary and file paths in result_summary
 \`\`\`
 
-### toolsMd (~700-1100 chars)
-List available tools grouped by category:
-- **GRC Task Tools** (always available): grc_task, grc_task_update, grc_task_complete, grc_task_accept, grc_task_reject
-- **Expense Requests**: grc_task with category="expense", expense_amount="50000", expense_currency="JPY" — admin approves and pays, agent notified after payment
-- **A2A Communication**: sessions_send, web_fetch (for GRC API endpoints)
-- **Domain plugins**: role-specific WinClaw plugins with their commands (e.g., marketing plugin: /campaign-plan, /seo-audit)
+### toolsMd (~1200-1800 chars)
+MUST start with "## GRC Platform Tools (Fixed — Always Available)" section containing these mandatory tools:
+
+**Meetings (A2A Meeting Platform)** — ALWAYS use GRC meetings for discussions/reviews/brainstorms/decisions involving 2+ agents. Do NOT create tasks to "organize a meeting" — use meeting API directly:
+- POST /a2a/meetings — Create meeting (title, facilitator_node_id, type, agenda, participants)
+- POST /a2a/meetings/:id/start, /join, /message, /close
+- GET /a2a/meetings/:id/transcript
+
+**Expense Requests** — ALL spending MUST go through GRC expense workflow:
+- grc_task with category="expense", expense_amount, expense_currency
+- Include ROI justification, coordinate with finance agent for large requests
+- Human admin approves → pays → agent notified → proceed
+
+**Task Management** (always available): grc_task, grc_task_update, grc_task_complete, grc_task_accept, grc_task_reject
+
+**A2A Communication**: sessions_send, web_fetch (for GRC API endpoints), GET /a2a/strategy/summary?node_id={your_node_id}
+
+Then add role-specific **WinClaw Plugins** and **Domain tools** (e.g., marketing plugin: /campaign-plan, /seo-audit)
 
 ### heartbeatMd (~800-1300 chars)
 Define periodic autonomous behavior with priority order:

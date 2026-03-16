@@ -17,17 +17,17 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   // ── C-Suite ────────────────────────────────────
   ceo: {
     canCreateTasks: true,
-    maxTasksPerDay: 10,
-    maxTasksPerHour: 5,
-    allowedCategories: ["strategic", "operational", "expense"],
+    maxTasksPerDay: 999, // Intentionally unlimited per owner directive
+    maxTasksPerHour: 999, // Intentionally unlimited per owner directive
+    allowedCategories: ["strategic", "operational", "administrative", "expense"],
     canDelegateToRoles: ["*"],
     requiresApproval: false,
     maxExpenseAmount: null,
   },
   cto: {
     canCreateTasks: true,
-    maxTasksPerDay: 8,
-    maxTasksPerHour: 4,
+    maxTasksPerDay: 30,
+    maxTasksPerHour: 10,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: ["engineering", "support", "marketing"],
     requiresApproval: false,
@@ -35,8 +35,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   cfo: {
     canCreateTasks: true,
-    maxTasksPerDay: 6,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational", "expense"],
     canDelegateToRoles: ["*"],
     requiresApproval: false,
@@ -45,8 +45,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   // ── Department Heads ───────────────────────────
   marketing: {
     canCreateTasks: true,
-    maxTasksPerDay: 5,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: ["sales", "support", "engineering-lead"],
     requiresApproval: false,
@@ -54,8 +54,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   sales: {
     canCreateTasks: true,
-    maxTasksPerDay: 5,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: ["marketing", "support", "engineering-lead"],
     requiresApproval: false,
@@ -63,8 +63,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   engineering: {
     canCreateTasks: true,
-    maxTasksPerDay: 5,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: ["support", "marketing", "sales"],
     requiresApproval: false,
@@ -73,8 +73,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   // ── Aliases (role template IDs use hyphenated names) ──
   "engineering-lead": {
     canCreateTasks: true,
-    maxTasksPerDay: 5,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: ["marketing", "finance", "sales", "support"],
     requiresApproval: false,
@@ -82,8 +82,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   finance: {
     canCreateTasks: true,
-    maxTasksPerDay: 5,
-    maxTasksPerHour: 3,
+    maxTasksPerDay: 20,
+    maxTasksPerHour: 8,
     allowedCategories: ["strategic", "operational", "expense"],
     canDelegateToRoles: ["marketing", "engineering-lead", "sales"],
     requiresApproval: false,
@@ -91,8 +91,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   hr: {
     canCreateTasks: true,
-    maxTasksPerDay: 3,
-    maxTasksPerHour: 2,
+    maxTasksPerDay: 15,
+    maxTasksPerHour: 5,
     allowedCategories: ["operational", "administrative"],
     canDelegateToRoles: [],
     requiresApproval: false,
@@ -100,8 +100,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   legal: {
     canCreateTasks: true,
-    maxTasksPerDay: 3,
-    maxTasksPerHour: 2,
+    maxTasksPerDay: 10,
+    maxTasksPerHour: 3,
     allowedCategories: ["operational"],
     canDelegateToRoles: [],
     requiresApproval: true,
@@ -109,8 +109,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   },
   support: {
     canCreateTasks: true,
-    maxTasksPerDay: 3,
-    maxTasksPerHour: 2,
+    maxTasksPerDay: 10,
+    maxTasksPerHour: 3,
     allowedCategories: ["operational"],
     canDelegateToRoles: [],
     requiresApproval: true,
@@ -119,8 +119,8 @@ export const AGENT_TASK_POLICIES: Record<string, AgentTaskPolicy> = {
   // ── Default (custom roles) ─────────────────────
   _default: {
     canCreateTasks: true,
-    maxTasksPerDay: 3,
-    maxTasksPerHour: 2,
+    maxTasksPerDay: 10,
+    maxTasksPerHour: 3,
     allowedCategories: ["strategic", "operational"],
     canDelegateToRoles: [],
     requiresApproval: true,

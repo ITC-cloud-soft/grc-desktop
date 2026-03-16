@@ -1448,6 +1448,248 @@ export class TasksService {
   }
 
   /**
+   * Batch create multiple tasks at once.
+   * Rate limit checks the total batch size upfront.
+   * Individual tasks may fail (duplicate detection, etc.) — partial success is allowed.
+   */
+  async createAgentTaskBatch(params: {
+    creatorRoleId: string;
+    creatorNodeId: string;
+    triggerType: string;
+    triggerSource?: string;
+    tasks: Array<{
+      title: string;
+      description?: string;
+      category?: string;
+      priority?: string;
+      targetRoleId?: string;
+      targetNodeId?: string;
+      expenseAmount?: string;
+      expenseCurrency?: string;
+      deadline?: string;
+      deliverables?: string[];
+      notes?: string;
+    }>;
+  }) {
+    const policy: AgentTaskPolicy =
+      AGENT_TASK_POLICIES[params.creatorRoleId] ??
+      AGENT_TASK_POLICIES._default;
+
+    if (!policy.canCreateTasks) {
+      throw new BadRequestError(
+        `Role '${params.creatorRoleId}' is not allowed to create tasks`,
+      );
+    }
+
+    // Upfront rate limit check for entire batch
+    const hourCount = await this.countAgentTasksLastHour(
+      params.creatorRoleId,
+      params.creatorNodeId,
+    );
+    if (hourCount + params.tasks.length > policy.maxTasksPerHour) {
+      throw new BadRequestError(
+        `Batch of ${params.tasks.length} tasks would exceed hourly limit ` +
+        `(${hourCount}/${policy.maxTasksPerHour} used). Reduce batch size or wait.`,
+      );
+    }
+
+    const todayCount = await this.countAgentTasksToday(
+      params.creatorRoleId,
+      params.creatorNodeId,
+    );
+    if (todayCount + params.tasks.length > policy.maxTasksPerDay) {
+      throw new BadRequestError(
+        `Batch of ${params.tasks.length} tasks would exceed daily limit ` +
+        `(${todayCount}/${policy.maxTasksPerDay} used).`,
+      );
+    }
+
+    // Create tasks individually (allow partial success)
+    const results: Array<{
+      index: number;
+      ok: boolean;
+      task?: Record<string, unknown>;
+      error?: string;
+    }> = [];
+
+    for (const [index, taskDef] of params.tasks.entries()) {
+      try {
+        const { task } = await this.createAgentTask({
+          creatorRoleId: params.creatorRoleId,
+          creatorNodeId: params.creatorNodeId,
+          triggerType: params.triggerType,
+          triggerSource: params.triggerSource,
+          title: taskDef.title,
+          description: taskDef.description,
+          category: taskDef.category,
+          priority: taskDef.priority,
+          targetRoleId: taskDef.targetRoleId,
+          targetNodeId: taskDef.targetNodeId,
+          expenseAmount: taskDef.expenseAmount,
+          expenseCurrency: taskDef.expenseCurrency,
+          deadline: taskDef.deadline,
+          deliverables: taskDef.deliverables,
+          notes: taskDef.notes,
+        });
+        results.push({ index, ok: true, task: task as unknown as Record<string, unknown> });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        results.push({ index, ok: false, error: message });
+      }
+    }
+
+    const created = results.filter((r) => r.ok).length;
+
+    return {
+      results,
+      summary: {
+        total: params.tasks.length,
+        created,
+        failed: params.tasks.length - created,
+      },
+      policy_applied: {
+        daily_remaining: policy.maxTasksPerDay - todayCount - created,
+        hourly_remaining: policy.maxTasksPerHour - hourCount - created,
+      },
+    };
+  }
+
+  /**
+   * Send a nudge/reminder for a pending task.
+   * Notifies the assignee via SSE + relay queue.
+   * If escalation_level is "escalate", also notifies CEO.
+   */
+  async nudgeTask(params: {
+    taskCode: string;
+    nudgerNodeId: string;
+    nudgerRoleId: string;
+    message?: string;
+    escalationLevel: "gentle" | "urgent" | "escalate";
+  }): Promise<{
+    nudged: boolean;
+    escalation_level: string;
+    task_code: string;
+    notified_nodes: string[];
+  }> {
+    // Find the task by taskCode
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.taskCode, params.taskCode))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new BadRequestError(`Task with code '${params.taskCode}' not found`);
+    }
+    const task = rows[0];
+
+    // Cannot nudge completed/cancelled tasks
+    const terminalStatuses = ["completed", "approved", "cancelled"];
+    if (terminalStatuses.includes(task.status)) {
+      throw new BadRequestError(
+        `Cannot nudge a task with status '${task.status}'`,
+      );
+    }
+
+    const notifiedNodes: string[] = [];
+
+    // Notify assignee via SSE
+    const targetNodeId = task.assignedNodeId ?? task.creatorNodeId;
+    if (targetNodeId) {
+      const nudgeContent =
+        `[NUDGE:${params.escalationLevel}] ${params.message || "Please prioritize this task."}`;
+
+      // Push task event via SSE
+      const pushed = nodeConfigSSE.pushTaskEvent(targetNodeId, {
+        event_type: "task_feedback",
+        task_id: task.id,
+        task_code: task.taskCode,
+        title: task.title,
+        priority: params.escalationLevel === "escalate" ? "critical" : task.priority,
+        category: task.category ?? "operational",
+        status: task.status,
+        feedback: nudgeContent,
+        creator_node_id: params.nudgerNodeId,
+        creator_role_id: params.nudgerRoleId,
+      });
+
+      if (pushed) {
+        notifiedNodes.push(targetNodeId);
+      }
+
+      // Also send via relay queue for guaranteed delivery
+      const { a2aRelayQueueTable } = await import("../relay/schema.js");
+
+      const msgId = uuidv4();
+      await db.insert(a2aRelayQueueTable).values({
+        id: msgId,
+        fromNodeId: params.nudgerNodeId,
+        toNodeId: targetNodeId,
+        messageType: "directive",
+        subject: `Task nudge: ${task.title} (${task.taskCode})`,
+        payload: {
+          action: "task_nudge",
+          task_code: task.taskCode,
+          task_id: task.id,
+          escalation_level: params.escalationLevel,
+          message: params.message,
+          nudged_by_role: params.nudgerRoleId,
+          nudged_by_node: params.nudgerNodeId,
+        },
+        priority: params.escalationLevel === "escalate" ? "critical" : "high",
+        status: pushed ? "delivered" : "queued",
+        deliveredAt: pushed ? new Date() : null,
+        expiresAt: null,
+      });
+    }
+
+    // If escalation level is "escalate", notify CEO nodes
+    if (params.escalationLevel === "escalate") {
+      try {
+        const { getNodesByRoles } = await import("../evolution/role-resolver.js");
+        const ceoNodes = await getNodesByRoles(["ceo"]);
+
+        for (const ceo of ceoNodes) {
+          nodeConfigSSE.pushTaskEvent(ceo.nodeId, {
+            event_type: "task_feedback",
+            task_id: task.id,
+            task_code: task.taskCode,
+            title: `[ESCALATION] ${task.title}`,
+            priority: "critical",
+            category: task.category ?? "operational",
+            status: task.status,
+            feedback: `Escalated by ${params.nudgerRoleId}: ${params.message || "Requires attention"}`,
+            creator_node_id: params.nudgerNodeId,
+            creator_role_id: params.nudgerRoleId,
+          });
+          notifiedNodes.push(ceo.nodeId);
+        }
+      } catch {
+        // role-resolver might not find CEO nodes — non-fatal
+        logger.warn("Could not find CEO nodes for escalation notification");
+      }
+    }
+
+    logger.info(
+      {
+        taskCode: params.taskCode,
+        escalationLevel: params.escalationLevel,
+        nudger: params.nudgerRoleId,
+        notifiedCount: notifiedNodes.length,
+      },
+      "Task nudged",
+    );
+
+    return {
+      nudged: true,
+      escalation_level: params.escalationLevel,
+      task_code: params.taskCode,
+      notified_nodes: notifiedNodes,
+    };
+  }
+
+  /**
    * Re-send SSE task_assigned events for all pending tasks.
    * Useful after server restart or when SSE events were missed.
    * Also auto-approves draft tasks (draft → pending) so they can be picked up.

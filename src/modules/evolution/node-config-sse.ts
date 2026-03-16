@@ -38,6 +38,19 @@ export interface TaskSSEEvent {
   result_summary?: string;
 }
 
+export interface RelaySSEEvent {
+  event_type: "relay_message" | "message_read";
+  message_id: string;
+  from_node_id?: string;
+  message_type?: string;
+  subject?: string | null;
+  payload?: unknown;
+  priority?: string;
+  created_at?: string;
+  read_by?: string;
+  read_at?: string;
+}
+
 export interface ConfigUpdateEvent {
   revision: number;
   reason: string;
@@ -179,6 +192,33 @@ class NodeConfigSSEManager {
     logger.info(
       { nodeId, eventType: event.event_type, sessionId: event.session_id, clients: nodeConns.size },
       "Meeting event pushed to node",
+    );
+    return true;
+  }
+
+  /**
+   * Push a relay message event to a specific node via SSE.
+   */
+  pushRelayEvent(nodeId: string, event: RelaySSEEvent): boolean {
+    const nodeConns = this.connections.get(nodeId);
+    if (!nodeConns || nodeConns.size === 0) {
+      logger.debug({ nodeId }, "No SSE connections for node — skipping relay event push");
+      return false;
+    }
+
+    const payload = `event: relay_message\ndata: ${JSON.stringify(event)}\n\n`;
+
+    for (const res of nodeConns) {
+      try {
+        res.write(payload);
+      } catch {
+        nodeConns.delete(res);
+      }
+    }
+
+    logger.info(
+      { nodeId, eventType: event.event_type, messageId: event.message_id, clients: nodeConns.size },
+      "Relay event pushed to node",
     );
     return true;
   }

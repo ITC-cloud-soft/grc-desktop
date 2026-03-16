@@ -974,8 +974,9 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     asyncHandler(async (_req: Request, res: Response) => {
       const db = getDb();
 
-      const fiveMinutesAgo = new Date();
-      fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5);
+      // Use 24-hour window to match the node list's "Active" status criteria
+      const activeThreshold = new Date();
+      activeThreshold.setHours(activeThreshold.getHours() - 24);
 
       const [
         genesByStatus,
@@ -1003,7 +1004,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         db
           .select({ count: sql<number>`COUNT(*)` })
           .from(nodesTable)
-          .where(sql`${nodesTable.lastHeartbeat} >= ${fiveMinutesAgo}`),
+          .where(sql`${nodesTable.lastHeartbeat} >= ${activeThreshold}`),
         db.select({ count: sql<number>`COUNT(*)` }).from(nodesTable),
         db.select({ count: sql<number>`COUNT(*)` }).from(genesTable),
         db.select({ count: sql<number>`COUNT(*)` }).from(capsulesTable),

@@ -18,6 +18,7 @@ import {
 import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { nodeIdSchema } from "../../shared/utils/validators.js";
 import { AgentCardService } from "./service.js";
+import { nodeConfigSSE } from "../evolution/node-config-sse.js";
 
 const logger = pino({ name: "module:a2a-gateway" });
 
@@ -106,6 +107,41 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   );
 
   // ────────────────────────────────────────────
+  // GET /a2a/agents/roster — Agent-facing roster with online status
+  // (Must be before /:nodeId to avoid Express matching conflicts)
+  // ────────────────────────────────────────────
+  router.get(
+    "/agents/roster",
+    authRequired,
+    asyncHandler(async (req: Request, res: Response) => {
+      const agents = await service.listAgentCards();
+      const sseConnectedIds = nodeConfigSSE.getConnectedNodeIds();
+
+      const roster = agents.map((a) => ({
+        node_id: a.nodeId,
+        status: a.status,
+        sse_connected: sseConnectedIds.includes(a.nodeId),
+        last_seen_at: a.lastSeenAt,
+        role_id: ((a.agentCard as Record<string, unknown>)?.role_id as string) ?? null,
+        display_name:
+          ((a.agentCard as Record<string, unknown>)?.display_name as string) ?? a.nodeId,
+      }));
+
+      res.json({
+        ok: true,
+        roster,
+        summary: {
+          total: roster.length,
+          online: roster.filter((r) => r.status === "online").length,
+          sse_connected: roster.filter((r) => r.sse_connected).length,
+          offline: roster.filter((r) => r.status === "offline").length,
+          busy: roster.filter((r) => r.status === "busy").length,
+        },
+      });
+    }),
+  );
+
+  // ────────────────────────────────────────────
   // GET /a2a/agents/:nodeId — Get specific Agent Card
   // ────────────────────────────────────────────
   router.get(
@@ -123,5 +159,5 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   // ── Mount router under /a2a prefix ────────
   app.use("/a2a", router);
 
-  logger.info("A2A Gateway module registered — 4 A2A endpoints active");
+  logger.info("A2A Gateway module registered — 5 A2A endpoints active");
 }

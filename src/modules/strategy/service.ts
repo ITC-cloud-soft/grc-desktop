@@ -238,8 +238,14 @@ export class StrategyService {
         continue;
       }
 
-      // 3a. Build variable maps
-      const assignmentVars = (node.assignmentVariables as Record<string, string>) ?? {};
+      // 3a. Build variable maps — merge node-level employee info as fallback
+      const assignmentVars: Record<string, string> = {
+        ...(node.employeeName ? { employee_name: node.employeeName } : {}),
+        ...(node.employeeName ? { human_name: node.employeeName } : {}),
+        ...(node.employeeId ? { employee_id: node.employeeId } : {}),
+        ...(node.nodeId ? { node_id: node.nodeId } : {}),
+        ...((node.assignmentVariables as Record<string, string>) ?? {}),
+      };
       const department = template.department ?? undefined;
       const strategyVars = this.buildStrategyVariables(strategy, roleId, department);
 

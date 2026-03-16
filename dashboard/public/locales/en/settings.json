@@ -6,5 +6,52 @@
     "description": "Select your preferred display language. The interface will update immediately.",
     "current": "Current language: {{language}}",
     "browserDetected": "Detected from browser: {{language}}"
+  },
+  "modules": {
+    "title": "Feature Modules",
+    "description": "Enable or disable functional modules. Changes take effect after server restart.",
+    "core": "Core Modules",
+    "coreDesc": "Essential modules that are always enabled.",
+    "optional": "Optional Modules",
+    "optionalDesc": "Toggle these modules based on your needs.",
+    "heavy": "Advanced Modules",
+    "heavyDesc": "These modules require MySQL and external services. Not available in SQLite mode.",
+    "requiresMysql": "Requires MySQL",
+    "requiresRestart": "Changes require server restart to take effect.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "locked": "Locked",
+    "names": {
+      "auth": "Authentication",
+      "strategy": "Strategy Management",
+      "roles": "Role Templates",
+      "platform": "Platform Values",
+      "model-keys": "Model Keys",
+      "relay": "A2A Relay",
+      "a2a-gateway": "A2A Gateway",
+      "tasks": "Task Management",
+      "meetings": "Meeting Management",
+      "evolution": "Evolution Pool",
+      "clawhub": "Skill Marketplace",
+      "community": "Community Forum",
+      "telemetry": "Telemetry & Analytics",
+      "update": "Update Management"
+    },
+    "descriptions": {
+      "auth": "User authentication and session management",
+      "strategy": "Company strategy, mission, vision, and KPIs",
+      "roles": "Agent role templates and MD configurations",
+      "platform": "Platform values and culture settings",
+      "model-keys": "AI model API key distribution",
+      "relay": "Inter-node A2A message relay queue",
+      "a2a-gateway": "A2A gateway protocol for agent communication",
+      "tasks": "Task assignment, tracking, and progress logging",
+      "meetings": "Multi-agent meeting scheduling and transcripts",
+      "evolution": "Gene/capsule evolution pool with lifecycle events",
+      "clawhub": "Skill marketplace with search and downloads",
+      "community": "Discussion forum with topics, replies, and voting",
+      "telemetry": "Node usage analytics and reporting",
+      "update": "Client release and update management"
+    }
   }
 }

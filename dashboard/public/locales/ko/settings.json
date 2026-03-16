@@ -6,5 +6,52 @@
     "description": "원하는 표시 언어를 선택하세요. 인터페이스가 즉시 업데이트됩니다.",
     "current": "현재 언어: {{language}}",
     "browserDetected": "브라우저에서 감지: {{language}}"
+  },
+  "modules": {
+    "title": "기능 모듈",
+    "description": "기능 모듈을 활성화하거나 비활성화합니다. 변경사항은 서버 재시작 후 적용됩니다.",
+    "core": "핵심 모듈",
+    "coreDesc": "항상 활성화되는 필수 모듈입니다.",
+    "optional": "선택 모듈",
+    "optionalDesc": "필요에 따라 이 모듈들을 전환할 수 있습니다.",
+    "heavy": "고급 모듈",
+    "heavyDesc": "이 모듈들은 MySQL과 외부 서비스가 필요합니다. SQLite 모드에서는 사용할 수 없습니다.",
+    "requiresMysql": "MySQL 필요",
+    "requiresRestart": "변경사항은 서버 재시작 후 적용됩니다.",
+    "enabled": "활성화",
+    "disabled": "비활성화",
+    "locked": "잠금",
+    "names": {
+      "auth": "인증",
+      "strategy": "전략 관리",
+      "roles": "역할 템플릿",
+      "platform": "플랫폼 가치",
+      "model-keys": "모델 키",
+      "relay": "A2A 릴레이",
+      "a2a-gateway": "A2A 게이트웨이",
+      "tasks": "작업 관리",
+      "meetings": "회의 관리",
+      "evolution": "진화 풀",
+      "clawhub": "스킬 마켓플레이스",
+      "community": "커뮤니티 포럼",
+      "telemetry": "텔레메트리 분석",
+      "update": "업데이트 관리"
+    },
+    "descriptions": {
+      "auth": "사용자 인증 및 세션 관리",
+      "strategy": "회사 전략, 미션, 비전 및 KPI 관리",
+      "roles": "에이전트 역할 템플릿 및 MD 구성",
+      "platform": "플랫폼 가치 및 문화 설정",
+      "model-keys": "AI 모델 API 키 배포 및 관리",
+      "relay": "노드 간 A2A 메시지 릴레이 큐",
+      "a2a-gateway": "에이전트 통신용 A2A 게이트웨이 프로토콜",
+      "tasks": "작업 할당, 추적 및 진행 기록",
+      "meetings": "멀티 에이전트 회의 일정 및 기록",
+      "evolution": "유전자/캡슐 진화 풀 및 수명주기 이벤트",
+      "clawhub": "스킬 마켓플레이스 (검색 및 다운로드)",
+      "community": "토론 포럼 (주제, 답글, 투표)",
+      "telemetry": "노드 사용 분석 및 보고서",
+      "update": "클라이언트 릴리스 및 업데이트 관리"
+    }
   }
 }

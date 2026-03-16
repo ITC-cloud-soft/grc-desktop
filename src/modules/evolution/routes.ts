@@ -31,6 +31,7 @@ import { nodesTable } from "./schema.js";
 import { nodeConfigSSE } from "./node-config-sse.js";
 import { RolesService } from "../roles/service.js";
 import { AuthService } from "../auth/service.js";
+import { unifiedDelivery } from "../../shared/services/unified-delivery.js";
 
 const logger = pino({ name: "module:evolution" });
 
@@ -423,6 +424,16 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
       // Register SSE connection
       nodeConfigSSE.addConnection(nodeId, res);
+
+      // Replay pending relay messages on reconnect
+      try {
+        const replayed = await unifiedDelivery.replayPendingMessages(nodeId);
+        if (replayed > 0) {
+          logger.info({ nodeId, replayed }, "Replayed pending relay messages on SSE reconnect");
+        }
+      } catch (replayErr) {
+        logger.warn({ nodeId, err: replayErr }, "Failed to replay pending messages");
+      }
 
       // Clean up on disconnect
       req.on("close", () => {

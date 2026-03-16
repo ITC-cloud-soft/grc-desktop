@@ -12,11 +12,20 @@ import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
 import { asyncHandler, BadRequestError } from "../../shared/middleware/error-handler.js";
+import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { TasksService } from "./service.js";
 
 const logger = pino({ name: "module:tasks" });
 
 // ── Request Validation Schemas ──────────────────
+
+const nudgeTaskSchema = z.object({
+  task_code: z.string().min(1).max(50),
+  nudger_node_id: z.string().min(1).max(255),
+  nudger_role_id: z.string().min(1).max(50),
+  message: z.string().max(1000).optional(),
+  escalation_level: z.enum(["gentle", "urgent", "escalate"]).default("gentle"),
+});
 
 const taskUpdateSchema = z.object({
   task_id: z.string().uuid(),
@@ -239,8 +248,98 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
     }),
   );
 
+  // ────────────────────────────────────────────
+  // POST /a2a/tasks/batch — Batch create multiple tasks
+  // ────────────────────────────────────────────
+  const batchCreateTaskSchema = z.object({
+    creator_role_id: z.string().min(1).max(50),
+    creator_node_id: z.string().min(1).max(255),
+    trigger_type: z.enum([
+      "heartbeat",
+      "task_chain",
+      "strategy",
+      "meeting",
+      "escalation",
+    ]),
+    trigger_source: z.string().optional(),
+    tasks: z
+      .array(
+        z.object({
+          title: z.string().min(1).max(500),
+          description: z.string().optional(),
+          category: z
+            .enum(["strategic", "operational", "administrative", "expense"])
+            .optional(),
+          priority: z.enum(["critical", "high", "medium", "low"]).optional(),
+          target_role_id: z.string().max(50).optional(),
+          target_node_id: z.string().max(255).optional(),
+          expense_amount: z.string().max(30).optional(),
+          expense_currency: z.string().max(10).optional(),
+          deadline: z.string().datetime().optional(),
+          deliverables: z.array(z.string()).optional(),
+          notes: z.string().optional(),
+        }),
+      )
+      .min(1)
+      .max(20),
+  });
+
+  router.post(
+    "/batch",
+    authRequired,
+    rateLimitMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = batchCreateTaskSchema.parse(req.body);
+
+      const result = await service.createAgentTaskBatch({
+        creatorRoleId: body.creator_role_id,
+        creatorNodeId: body.creator_node_id,
+        triggerType: body.trigger_type,
+        triggerSource: body.trigger_source,
+        tasks: body.tasks.map((t) => ({
+          title: t.title,
+          description: t.description,
+          category: t.category,
+          priority: t.priority,
+          targetRoleId: t.target_role_id,
+          targetNodeId: t.target_node_id,
+          expenseAmount: t.expense_amount,
+          expenseCurrency: t.expense_currency,
+          deadline: t.deadline,
+          deliverables: t.deliverables,
+          notes: t.notes,
+        })),
+      });
+
+      const status = result.summary.failed === result.summary.total ? 400 : 201;
+      res.status(status).json({ ok: result.summary.created > 0, ...result });
+    }),
+  );
+
+  // ────────────────────────────────────────────
+  // POST /a2a/tasks/nudge — Send a reminder/nudge about a pending task
+  // ────────────────────────────────────────────
+  router.post(
+    "/nudge",
+    authRequired,
+    rateLimitMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = nudgeTaskSchema.parse(req.body);
+
+      const result = await service.nudgeTask({
+        taskCode: body.task_code,
+        nudgerNodeId: body.nudger_node_id,
+        nudgerRoleId: body.nudger_role_id,
+        message: body.message,
+        escalationLevel: body.escalation_level,
+      });
+
+      res.json({ ok: true, ...result });
+    }),
+  );
+
   // ── Mount router under /a2a/tasks prefix ───
   app.use("/a2a/tasks", router);
 
-  logger.info("Tasks module registered — 5 A2A endpoints active");
+  logger.info("Tasks module registered — 7 A2A endpoints active");
 }

@@ -815,6 +815,72 @@ export class TasksService {
         await this.pushTaskAssignedEvent(next);
       }
     }
+    // ── Auto-post to community on task completion ─────────────
+    if (newStatus === "completed") {
+      try {
+        const { getCommunityService } = await import("../community/service.js");
+        const { communityChannelsTable } = await import("../community/schema.js");
+
+        const communityService = getCommunityService();
+
+        // Find the task-updates channel
+        const channelRows = await db
+          .select({ id: communityChannelsTable.id })
+          .from(communityChannelsTable)
+          .where(eq(communityChannelsTable.name, "task-updates"))
+          .limit(1);
+
+        if (channelRows.length > 0) {
+          const channelId = channelRows[0].id;
+          const authorNodeId = task.assignedNodeId ?? actor;
+
+          const bodyLines = [
+            `## ${task.taskCode}: ${task.title}`,
+            "",
+            task.description ? `**説明:** ${task.description}` : "",
+            task.resultSummary ? `**結果:** ${task.resultSummary}` : "",
+            "",
+            `**カテゴリ:** ${task.category ?? "general"} | **優先度:** ${task.priority}`,
+            task.assignedRoleId ? `**担当:** ${task.assignedRoleId}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const autoPost = await communityService.createPost({
+            authorNodeId,
+            channelId,
+            postType: "experience" as import("../../shared/interfaces/community.interface.js").PostType,
+            title: `【タスク完了】${task.taskCode}: ${task.title}`,
+            contextData: {
+              body: bodyLines,
+              tags: ["task-completion", task.category ?? "general"],
+              auto_generated: true,
+              task_id: task.id,
+              task_code: task.taskCode,
+            },
+          });
+
+          // Broadcast to all connected nodes
+          nodeConfigSSE.broadcastCommunityEvent({
+            event_type: "community_new_post",
+            post_id: autoPost.id,
+            title: autoPost.title,
+            channel: "task-updates",
+            author_node_id: authorNodeId,
+            post_type: "experience",
+            body_preview: bodyLines.slice(0, 200),
+            created_at: new Date().toISOString(),
+          });
+
+          logger.info(
+            { taskId: task.id, postId: autoPost.id },
+            "Auto-posted task completion to community",
+          );
+        }
+      } catch (err) {
+        logger.warn({ taskId: id, err }, "Failed to auto-post task completion to community");
+      }
+    }
     // ── End SSE Notifications ─────────────────────────────────
 
     const updated = await db

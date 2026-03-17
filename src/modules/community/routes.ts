@@ -392,5 +392,10 @@ export async function register(app: Express, config: GrcConfig) {
   // ── Mount ──────────────────────────────────────
 
   app.use("/api/v1/community", router);
+
+  // Mount A2A tool endpoints for AI agents
+  const { registerA2A } = await import("./a2a-routes.js");
+  await registerA2A(app, config);
+
   logger.info("Community module registered");
 }

@@ -51,6 +51,17 @@ export interface RelaySSEEvent {
   read_at?: string;
 }
 
+export interface CommunitySSEEvent {
+  event_type: "community_new_post" | "community_new_reply";
+  post_id: string;
+  title: string;
+  channel: string;
+  author_node_id: string;
+  post_type: string;
+  body_preview: string;
+  created_at: string;
+}
+
 export interface ConfigUpdateEvent {
   revision: number;
   reason: string;
@@ -221,6 +232,30 @@ class NodeConfigSSEManager {
       "Relay event pushed to node",
     );
     return true;
+  }
+
+  /**
+   * Broadcast a community event to all connected nodes (except the author).
+   */
+  broadcastCommunityEvent(event: CommunitySSEEvent, excludeNodeId?: string): number {
+    let pushed = 0;
+    const payload = `event: community_event\ndata: ${JSON.stringify(event)}\n\n`;
+    for (const [nodeId, conns] of this.connections) {
+      if (nodeId === excludeNodeId) continue;
+      for (const res of conns) {
+        try {
+          res.write(payload);
+          pushed++;
+        } catch {
+          conns.delete(res);
+        }
+      }
+    }
+    logger.info(
+      { eventType: event.event_type, postId: event.post_id, pushed },
+      "Community event broadcast",
+    );
+    return pushed;
   }
 
   /**

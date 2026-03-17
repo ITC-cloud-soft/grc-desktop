@@ -109,6 +109,26 @@
     "subtitle": "进化流水线状态",
     "stages": "阶段",
     "running": "运行中",
-    "queued": "排队中"
+    "queued": "排队中",
+    "table": {
+      "assetId": "资产ID",
+      "assetRef": "资产引用",
+      "category": "分类",
+      "safetyScore": "安全分数",
+      "submitted": "提交时间"
+    },
+    "stats": {
+      "pendingReview": "待审核",
+      "approved": "已批准",
+      "promoted": "已推广",
+      "quarantined": "已隔离"
+    },
+    "chart": {
+      "genesByStatus": "按状态分类的基因",
+      "promotionRate": "推广率",
+      "ofGenesPromoted": "的基因已推广"
+    },
+    "pendingReview": "待审核",
+    "noAssetsPending": "没有待审核的资产。"
   }
 }

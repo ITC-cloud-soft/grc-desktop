@@ -109,6 +109,26 @@
     "subtitle": "Evolution pipeline status",
     "stages": "Stages",
     "running": "Running",
-    "queued": "Queued"
+    "queued": "Queued",
+    "table": {
+      "assetId": "Asset ID",
+      "assetRef": "Asset Ref",
+      "category": "Category",
+      "safetyScore": "Safety Score",
+      "submitted": "Submitted"
+    },
+    "stats": {
+      "pendingReview": "Pending Review",
+      "approved": "Approved",
+      "promoted": "Promoted",
+      "quarantined": "Quarantined"
+    },
+    "chart": {
+      "genesByStatus": "Genes by Status",
+      "promotionRate": "Promotion Rate",
+      "ofGenesPromoted": "of genes promoted"
+    },
+    "pendingReview": "Pending Review",
+    "noAssetsPending": "No assets pending review."
   }
 }

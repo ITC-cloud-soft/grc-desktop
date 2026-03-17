@@ -109,6 +109,26 @@
     "subtitle": "진화 파이프라인 상태",
     "stages": "단계",
     "running": "실행 중",
-    "queued": "대기 중"
+    "queued": "대기 중",
+    "table": {
+      "assetId": "에셋 ID",
+      "assetRef": "에셋 참조",
+      "category": "카테고리",
+      "safetyScore": "안전 점수",
+      "submitted": "제출일"
+    },
+    "stats": {
+      "pendingReview": "검토 대기",
+      "approved": "승인됨",
+      "promoted": "프로모트됨",
+      "quarantined": "격리됨"
+    },
+    "chart": {
+      "genesByStatus": "상태별 유전자",
+      "promotionRate": "프로모트율",
+      "ofGenesPromoted": "의 유전자가 프로모트됨"
+    },
+    "pendingReview": "검토 대기",
+    "noAssetsPending": "검토 대기 중인 에셋이 없습니다."
   }
 }

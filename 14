@@ -1,0 +1,9 @@
+Collecting websockets
+  Downloading websockets-16.0-cp312-cp312-win_amd64.whl.metadata (7.0 kB)
+Downloading websockets-16.0-cp312-cp312-win_amd64.whl (178 kB)
+Installing collected packages: websockets
+  Attempting uninstall: websockets
+    Found existing installation: websockets 12.0
+    Uninstalling websockets-12.0:
+      Successfully uninstalled websockets-12.0
+Successfully installed websockets-16.0

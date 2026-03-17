@@ -109,6 +109,26 @@
     "subtitle": "進化パイプラインの状態",
     "stages": "ステージ",
     "running": "実行中",
-    "queued": "キュー中"
+    "queued": "キュー中",
+    "table": {
+      "assetId": "アセットID",
+      "assetRef": "アセット参照",
+      "category": "カテゴリ",
+      "safetyScore": "安全スコア",
+      "submitted": "提出日"
+    },
+    "stats": {
+      "pendingReview": "レビュー待ち",
+      "approved": "承認済み",
+      "promoted": "プロモート済み",
+      "quarantined": "隔離中"
+    },
+    "chart": {
+      "genesByStatus": "ステータス別遺伝子",
+      "promotionRate": "プロモート率",
+      "ofGenesPromoted": "の遺伝子がプロモート"
+    },
+    "pendingReview": "レビュー待ち",
+    "noAssetsPending": "レビュー待ちのアセットはありません。"
   }
 }

@@ -14,12 +14,12 @@ export function Pipeline() {
   const columns: Column<Record<string, unknown>>[] = [
     {
       key: 'id',
-      label: 'Asset ID',
+      label: t('pipeline.table.assetId'),
       render: (v) => <span className="mono text-sm">{String(v).slice(0, 12)}…</span>,
     },
     {
       key: 'assetId',
-      label: 'Asset Ref',
+      label: t('pipeline.table.assetRef'),
       render: (v) => <span className="mono text-sm">{String(v).slice(0, 10)}…</span>,
     },
     {
@@ -29,12 +29,12 @@ export function Pipeline() {
     },
     {
       key: 'category',
-      label: 'Category',
+      label: t('pipeline.table.category'),
       render: (v) => v ? String(v) : <span className="text-muted">—</span>,
     },
     {
       key: 'safetyScore',
-      label: 'Safety Score',
+      label: t('pipeline.table.safetyScore'),
       render: (v) => {
         if (v === null || v === undefined) return <span className="text-muted">—</span>;
         const score = Number(v) * 100;
@@ -52,7 +52,7 @@ export function Pipeline() {
     },
     {
       key: 'createdAt',
-      label: 'Submitted',
+      label: t('pipeline.table.submitted'),
       render: (v) => new Date(String(v)).toLocaleDateString(),
     },
   ];
@@ -76,28 +76,28 @@ export function Pipeline() {
 
       <div className="stat-grid stat-grid-4">
         <StatCard
-          title="Pending Review"
+          title={t('pipeline.stats.pendingReview')}
           value={pendingCount}
           icon="⏳"
           color="#ffbe0b"
           loading={statsLoading}
         />
         <StatCard
-          title="Approved"
+          title={t('pipeline.stats.approved')}
           value={approvedCount}
           icon="✅"
           color="#06d6a0"
           loading={statsLoading}
         />
         <StatCard
-          title="Promoted"
+          title={t('pipeline.stats.promoted')}
           value={promotedCount}
           icon="🚀"
           color="#4361ee"
           loading={statsLoading}
         />
         <StatCard
-          title="Quarantined"
+          title={t('pipeline.stats.quarantined')}
           value={quarantinedCount}
           icon="🔒"
           color="#ff006e"
@@ -112,22 +112,22 @@ export function Pipeline() {
             data={Object.entries(genesByStatus).map(([name, value]) => ({ name, value }))}
             xKey="name"
             yKey="value"
-            title="Genes by Status"
+            title={t('pipeline.chart.genesByStatus')}
             height={240}
           />
         </div>
         <div className="card">
-          <div className="chart-title">Promotion Rate</div>
+          <div className="chart-title">{t('pipeline.chart.promotionRate')}</div>
           <div className="big-metric">
             <div className="big-metric-value">{promotionRate}%</div>
-            <div className="big-metric-label">of genes promoted</div>
+            <div className="big-metric-label">{t('pipeline.chart.ofGenesPromoted')}</div>
           </div>
           <Chart
             type="pie"
             data={[
-              { name: 'Promoted', value: promotedCount },
-              { name: 'Approved', value: approvedCount },
-              { name: 'Quarantined', value: quarantinedCount },
+              { name: t('pipeline.stats.promoted'), value: promotedCount },
+              { name: t('pipeline.stats.approved'), value: approvedCount },
+              { name: t('pipeline.stats.quarantined'), value: quarantinedCount },
             ]}
             nameKey="name"
             valueKey="value"
@@ -137,13 +137,13 @@ export function Pipeline() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h2 className="card-title">Pending Review</h2>
+        <h2 className="card-title">{t('pipeline.pendingReview')}</h2>
         <DataTable
           columns={columns}
           data={(assets?.data ?? []) as unknown as Record<string, unknown>[]}
           loading={assetsLoading}
           rowKey="id"
-          emptyMessage="No assets pending review."
+          emptyMessage={t('pipeline.noAssetsPending')}
         />
       </div>
     </div>

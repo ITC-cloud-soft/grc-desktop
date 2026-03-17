@@ -1,0 +1,2 @@
+[dotenv@17.3.1] injecting env (31) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+ERR:You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ', INTERVAL 1 HOUR)' at line 1

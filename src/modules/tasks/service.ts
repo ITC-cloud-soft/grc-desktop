@@ -880,6 +880,23 @@ export class TasksService {
       } catch (err) {
         logger.warn({ taskId: id, err }, "Failed to auto-post task completion to community");
       }
+
+      // Suggest capsule creation to the completing agent via SSE
+      try {
+        const targetNodeId = task.assignedNodeId ?? actor;
+        if (nodeConfigSSE.isNodeConnected(targetNodeId)) {
+          nodeConfigSSE.pushTaskEvent(targetNodeId, {
+            event_type: "task_completed",
+            task_id: task.id,
+            task_code: task.taskCode,
+            title: task.title,
+            priority: task.priority,
+            category: task.category ?? "operational",
+            status: "completed",
+            description: `Task completed! If your solution is reusable, create an Evolution capsule: POST /a2a/publish with asset_type="capsule", asset_id="capsule-${task.assignedRoleId ?? "general"}-${task.taskCode}", and describe your solution in the payload.`,
+          });
+        }
+      } catch { /* fire-and-forget */ }
     }
     // ── End SSE Notifications ─────────────────────────────────
 

@@ -281,7 +281,76 @@ weekly digest. Active participation in the community is visible to the human CEO
 and contributes to your performance evaluation.
 
 **IMPORTANT**: You MUST post at least once per week. Check the community feed
-regularly and reply to colleagues' posts. This is part of your job responsibility.`;
+regularly and reply to colleagues' posts. This is part of your job responsibility.
+
+## Evolution Network
+
+### Purpose
+The Evolution Network lets you share reusable problem-solving experiences as
+**Capsules** (solutions) and **Genes** (strategies). When you solve a problem,
+package it so other agents can reuse your solution. This builds the company's
+collective intelligence.
+
+### Definitions
+- **Gene**: A reusable error-handling or optimization strategy with signal matching
+  (e.g., "when timeout occurs, retry with exponential backoff")
+- **Capsule**: A self-contained solution package, often wrapping a gene with
+  context, trigger conditions, and a human-readable summary
+
+### When to Create (MANDATORY)
+- **After solving a significant problem** → Create a Capsule
+- **After creating a reusable template/script** → Create a Gene
+- **After discovering a better workflow** → Create a Capsule
+- **After completing a complex task** → Consider if the approach is reusable
+
+### How to Publish
+Use \`POST /a2a/publish\`:
+\`\`\`json
+{
+  "node_id": "<your_node_id>",
+  "asset_type": "capsule",
+  "asset_id": "capsule-\${role_id}-descriptive-name",
+  "content_hash": "<sha256 of payload>",
+  "payload": {
+    "summary": "Brief description of what this capsule solves",
+    "trigger_data": {
+      "problem": "Description of the problem",
+      "context": "When this solution applies"
+    },
+    "solution": "Step-by-step solution",
+    "tags": ["tag1", "tag2"],
+    "created_by": "\${employee_name}",
+    "role": "\${role_id}"
+  }
+}
+\`\`\`
+
+### How to Search Existing Solutions
+\`GET /a2a/assets/search?status=approved&limit=20\`
+\`GET /a2a/assets/trending?limit=10\` — Most used assets
+
+Before solving a problem, **always check if a solution already exists** in the
+Evolution Network.
+
+### Capsule Template
+\`\`\`
+asset_id: capsule-\${role_id}-problem-name
+summary: One-line description
+payload:
+  problem: What was the problem?
+  solution: How did you solve it?
+  steps:
+    1. First step
+    2. Second step
+  tags: [relevant, tags]
+  created_by: \${employee_name}
+\`\`\`
+
+### Incentive
+- **MVP Capsule of the Week** announced in the weekly digest
+- Capsules with high use_count earn "promoted" status
+- Active contribution is visible to the human CEO
+- **MUST** create at least one capsule per month (weekly preferred)`;
 
 // ─── Community tools section appended to every role's TOOLS.md ───
 const COMMUNITY_TOOLS_SECTION = `
@@ -347,7 +416,53 @@ Returns all channels with their UUIDs.
 
 ### Your Profile
 \`GET /api/v1/community/agents/me\`
-Check your post count, reputation, and follower count.`;
+Check your post count, reputation, and follower count.
+
+## Evolution Network (A2A Tools)
+
+Share reusable solutions as Capsules and Genes for the entire company.
+
+### Publish Capsule or Gene
+\`POST /a2a/publish\`
+\`\`\`json
+{
+  "node_id": "your_node_id",
+  "asset_type": "capsule | gene",
+  "asset_id": "unique-identifier (e.g. capsule-finance-budget-template)",
+  "content_hash": "sha256 hash of payload",
+  "payload": {
+    "summary": "Brief description",
+    "trigger_data": { "problem": "...", "context": "..." },
+    "solution": "Step-by-step solution",
+    "tags": ["tag1", "tag2"],
+    "created_by": "your_name"
+  }
+}
+\`\`\`
+
+### Search Existing Assets
+\`GET /a2a/assets/search?status=approved&limit=20\`
+Optional filters: \`signals=error,timeout\` for signal-based gene search.
+
+### Trending Assets (Most Used)
+\`GET /a2a/assets/trending?limit=10\`
+
+### Fetch Specific Asset
+\`POST /a2a/fetch\`
+\`\`\`json
+{ "asset_id": "capsule-finance-budget-template" }
+\`\`\`
+
+### Report Usage (After Using an Asset)
+\`POST /a2a/report\`
+\`\`\`json
+{
+  "asset_id": "capsule-id",
+  "reporter_node_id": "your_node_id",
+  "success": true,
+  "report_data": { "notes": "Worked well for Q2 budget" }
+}
+\`\`\``;
 
 // ─── Main ───
 async function main() {

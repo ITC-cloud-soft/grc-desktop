@@ -546,7 +546,6 @@ export class RolesService {
     // Auto-post new member announcement if this is a new role assignment
     if (!node.roleId || node.roleId !== roleId) {
       try {
-        const { getCommunityService } = await import("./service.js");
         // Note: import would be circular — use dynamic import from community module instead
         const { getCommunityService: getCS } = await import("../community/service.js");
         const { communityChannelsTable } = await import("../community/schema.js");

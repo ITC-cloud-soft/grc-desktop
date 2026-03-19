@@ -34,7 +34,7 @@ export function Assets() {
   const columns: Column<Record<string, unknown>>[] = [
     {
       key: 'id',
-      label: 'Asset ID',
+      label: t('assets.table.assetId'),
       render: (v) => (
         <a
           href={`/evolution/assets/${String(v)}`}
@@ -57,7 +57,7 @@ export function Assets() {
     },
     {
       key: 'assetId',
-      label: 'Asset Ref',
+      label: t('assets.table.assetRef'),
       render: (v, row) => {
         const a = row as unknown as Asset;
         return (
@@ -74,7 +74,7 @@ export function Assets() {
     },
     {
       key: 'category',
-      label: 'Category',
+      label: t('assets.table.category'),
       render: (v) => v ? <StatusBadge status={String(v)} variant="default" /> : <span className="text-muted">—</span>,
     },
     {
@@ -84,12 +84,12 @@ export function Assets() {
     },
     {
       key: 'useCount',
-      label: 'Use Count',
+      label: t('assets.table.useCount'),
       render: (v) => Number(v).toLocaleString(),
     },
     {
       key: 'successRate',
-      label: 'Success Rate',
+      label: t('assets.table.successRate'),
       render: (v) => {
         const pct = Number(v) * 100;
         return (
@@ -101,7 +101,7 @@ export function Assets() {
     },
     {
       key: 'safetyScore',
-      label: 'Safety',
+      label: t('assets.table.safety'),
       render: (v) => {
         if (v === null || v === undefined) return <span className="text-muted">—</span>;
         const score = Number(v);
@@ -123,20 +123,20 @@ export function Assets() {
     },
     {
       key: 'actions',
-      label: 'Actions',
+      label: t('assets.table.actions'),
       render: (_, row) => {
         const asset = row as unknown as Asset;
         const actions = [
-          { label: 'Promote', newStatus: 'promoted' },
-          { label: 'Approve', newStatus: 'approved' },
-          { label: 'Quarantine', newStatus: 'quarantined' },
+          { label: t('assets.actions.promote'), newStatus: 'promoted' },
+          { label: t('assets.actions.approve'), newStatus: 'approved' },
+          { label: t('assets.actions.quarantine'), newStatus: 'quarantined' },
         ];
         return (
           <div className="action-group">
             {actions.map(({ label, newStatus }) => (
               <button
-                key={label}
-                className={`btn btn-sm ${label === 'Quarantine' ? 'btn-danger' : label === 'Promote' ? 'btn-primary' : 'btn-default'}`}
+                key={newStatus}
+                className={`btn btn-sm ${newStatus === 'quarantined' ? 'btn-danger' : newStatus === 'promoted' ? 'btn-primary' : 'btn-default'}`}
                 onClick={() => setActionModal({ asset, action: label, newStatus })}
                 disabled={asset.status === newStatus}
               >
@@ -175,13 +175,13 @@ export function Assets() {
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <select className="select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
-            <option value="">All Categories</option>
+            <option value="">{t('assets.filters.allCategories')}</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
         <DataTable
-          columns={isAdmin ? columns : columns.filter(c => c.label !== 'Actions')}
+          columns={isAdmin ? columns : columns.filter(c => c.label !== t('assets.table.actions'))}
           data={(data?.data ?? []) as unknown as Record<string, unknown>[]}
           loading={isLoading}
           rowKey="id"
@@ -196,24 +196,27 @@ export function Assets() {
       <Modal
         open={!!actionModal}
         onClose={() => setActionModal(null)}
-        title={`${actionModal?.action} Asset`}
+        title={t('assets.modal.title', { action: actionModal?.action })}
         footer={
           <div className="modal-footer-actions">
-            <button className="btn btn-default" onClick={() => setActionModal(null)}>Cancel</button>
+            <button className="btn btn-default" onClick={() => setActionModal(null)}>{t('assets.modal.cancel')}</button>
             <button
-              className={`btn ${actionModal?.action === 'Quarantine' ? 'btn-danger' : 'btn-primary'}`}
+              className={`btn ${actionModal?.newStatus === 'quarantined' ? 'btn-danger' : 'btn-primary'}`}
               onClick={handleAction}
               disabled={changeStatus.isPending}
             >
-              {changeStatus.isPending ? 'Processing…' : 'Confirm'}
+              {changeStatus.isPending ? t('assets.modal.processing') : t('assets.modal.confirm')}
             </button>
           </div>
         }
       >
         {actionModal && (
           <p>
-            {actionModal.action} asset <strong>{actionModal.asset.assetId}</strong>? This will set
-            its status to <strong>{actionModal.newStatus}</strong>.
+            {t('assets.modal.body', {
+              action: actionModal.action,
+              assetId: actionModal.asset.assetId,
+              newStatus: actionModal.newStatus,
+            })}
           </p>
         )}
       </Modal>

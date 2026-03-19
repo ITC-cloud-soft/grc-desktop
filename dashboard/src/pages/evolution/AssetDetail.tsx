@@ -143,7 +143,7 @@ export function AssetDetail() {
           </div>
           <div>
             <span className="text-muted text-sm">Content Hash</span>
-            <div className="mono text-sm">{asset.contentHash}</div>
+            <div className="mono text-sm" style={{ fontSize: 11, wordBreak: 'break-all' }}>{asset.contentHash?.substring(0, 40)}...</div>
           </div>
           <div>
             <span className="text-muted text-sm">Use Count</span>
@@ -201,6 +201,51 @@ export function AssetDetail() {
           </div>
         </div>
       </div>
+
+      {/* Decoded Content Preview */}
+      {asset.contentHash && (() => {
+        try {
+          const base64 = asset.contentHash.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+          const decoded = JSON.parse(atob(padded));
+          return (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <h2 className="card-title">📄 コンテンツ内容</h2>
+              </div>
+              <div style={{ padding: '0 1rem 1rem' }}>
+                {decoded.source && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span className="badge badge-info" style={{ marginRight: 8 }}>{decoded.source}</span>
+                    {decoded.taskCode && <span className="badge badge-outline">{decoded.taskCode}</span>}
+                  </div>
+                )}
+                {decoded.title && (
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>{decoded.title}</h3>
+                )}
+                {decoded.resultSummary && (
+                  <p style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 8 }}>{decoded.resultSummary}</p>
+                )}
+                {decoded.deliverables && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span className="text-muted text-sm">成果物:</span>
+                    <p style={{ whiteSpace: 'pre-wrap' }}>{decoded.deliverables}</p>
+                  </div>
+                )}
+                {/* Fallback: show all fields for non-task genes */}
+                {!decoded.source && (
+                  <pre style={{ padding: 12, fontSize: 12, overflow: 'auto', maxHeight: 300, background: 'var(--bg-secondary)', borderRadius: 4 }}>
+                    {JSON.stringify(decoded, null, 2)}
+                  </pre>
+                )}
+              </div>
+            </div>
+          );
+        } catch {
+          // Not decodable — show hash only
+          return null;
+        }
+      })()}
 
       {/* Strategy / Trigger Data */}
       {isGene && asset.strategy && (

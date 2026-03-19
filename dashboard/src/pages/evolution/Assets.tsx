@@ -196,7 +196,32 @@ export function Assets() {
       label: t('assets.table.status'),
       render: (v) => <StatusBadge status={String(v)} />,
     },
-    ...(isAdmin ? [adminActions] : []),
+    ...(isAdmin ? [{
+      key: 'actions',
+      label: t('assets.table.actions'),
+      render: (_: unknown, row: Record<string, unknown>) => {
+        const asset = row as unknown as Asset;
+        // Capsules only get Approve/Quarantine (no Promote)
+        const actions = [
+          { label: t('assets.actions.approve'), newStatus: 'approved' },
+          { label: t('assets.actions.quarantine'), newStatus: 'quarantined' },
+        ];
+        return (
+          <div className="action-group">
+            {actions.map(({ label, newStatus }) => (
+              <button
+                key={newStatus}
+                className={`btn btn-sm ${newStatus === 'quarantined' ? 'btn-danger' : 'btn-default'}`}
+                onClick={(e) => { e.stopPropagation(); setActionModal({ asset, action: label, newStatus }); }}
+                disabled={asset.status === newStatus}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        );
+      },
+    } as Column<Record<string, unknown>>] : []),
   ];
 
   async function handleAction() {

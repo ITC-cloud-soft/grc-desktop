@@ -119,11 +119,17 @@ export function AssetDetail() {
     },
   ];
 
-  const statusActions = [
-    { label: t('assetDetail.promote'), newStatus: 'promoted' },
-    { label: t('assetDetail.approve'), newStatus: 'approved' },
-    { label: t('assetDetail.quarantine'), newStatus: 'quarantined' },
-  ];
+  // Gene: Promote/Approve/Quarantine. Capsule: only Approve/Quarantine (no Promote)
+  const statusActions = isGene
+    ? [
+        { label: t('assetDetail.promote'), newStatus: 'promoted' },
+        { label: t('assetDetail.approve'), newStatus: 'approved' },
+        { label: t('assetDetail.quarantine'), newStatus: 'quarantined' },
+      ]
+    : [
+        { label: t('assetDetail.approve'), newStatus: 'approved' },
+        { label: t('assetDetail.quarantine'), newStatus: 'quarantined' },
+      ];
 
   async function handleAction() {
     if (!actionModal || !id) return;

@@ -17,7 +17,7 @@ export function Assets() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [assetType, setAssetType] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('approved');
   const [category, setCategory] = useState('');
   const [actionModal, setActionModal] = useState<{ asset: Asset; action: string; newStatus: string } | null>(null);
   const { isAdmin } = useUser();
@@ -61,14 +61,21 @@ export function Assets() {
       render: (v, row) => {
         const a = row as unknown as Asset;
         return (
-          <a
-            href={`/evolution/assets/${a.id}`}
-            onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${a.id}`); }}
-            className="mono text-sm link"
-            title={String(v)}
-          >
-            {String(v).length > 20 ? `${String(v).slice(0, 20)}...` : String(v)}
-          </a>
+          <div>
+            <a
+              href={`/evolution/assets/${a.id}`}
+              onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${a.id}`); }}
+              className="mono text-sm link"
+              title={String(v)}
+            >
+              {String(v).length > 20 ? `${String(v).slice(0, 20)}...` : String(v)}
+            </a>
+            {a.assetType === 'capsule' && a.geneAssetId && (
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                → {a.geneAssetId}
+              </div>
+            )}
+          </div>
         );
       },
     },

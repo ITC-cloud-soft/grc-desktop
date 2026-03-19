@@ -204,7 +204,20 @@ export function AssetDetail() {
           {!isGene && asset.geneAssetId && (
             <div>
               <span className="text-muted text-sm">{t('assetDetail.parentGene')}</span>
-              <div className="mono text-sm">{asset.geneAssetId}</div>
+              <div>
+                <a
+                  href={`/evolution/assets?search=${asset.geneAssetId}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    // Navigate to assets list filtered by the parent gene asset_id
+                    navigate(`/evolution/assets`);
+                  }}
+                  className="mono text-sm link"
+                  style={{ cursor: 'pointer' }}
+                >
+                  🧬 {asset.geneAssetId}
+                </a>
+              </div>
             </div>
           )}
           {!isGene && asset.confidence !== null && (
@@ -402,6 +415,7 @@ function AssetUsageSection({
   data: import('../../api/hooks').AssetUsageResponse | undefined;
 }) {
   const { t } = useTranslation('evolution');
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -449,7 +463,13 @@ function AssetUsageSection({
                 {data.capsules.map((c) => (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td style={{ padding: '0.5rem' }}>
-                      <span className="mono text-sm">{c.assetId}</span>
+                      <a
+                        href={`/evolution/assets/${c.id}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${c.id}`); }}
+                        className="mono text-sm link"
+                      >
+                        💊 {c.assetId}
+                      </a>
                     </td>
                     <td style={{ padding: '0.5rem' }}>
                       {c.nodeName || <span className="text-muted">-</span>}

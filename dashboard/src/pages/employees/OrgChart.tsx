@@ -24,7 +24,7 @@ export function OrgChart() {
   const { t } = useTranslation('employees');
   const { data: employeesData, isLoading: empLoading, error: empError } = useEmployees();
   const employees = employeesData?.data ?? [];
-  const { data: rolesData, isLoading: rolesLoading, error: rolesError } = useRoleTemplates();
+  const { data: rolesData, isLoading: rolesLoading, error: rolesError } = useRoleTemplates({ page_size: 500 });
   const roles = rolesData?.data ?? [];
 
   const error = empError || rolesError;

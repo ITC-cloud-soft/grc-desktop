@@ -34,7 +34,7 @@ export function Employees() {
   const { t } = useTranslation('employees');
   const { data: employeesData, isLoading, error } = useEmployees();
   const employees = employeesData?.data ?? [];
-  const { data: rolesData } = useRoleTemplates();
+  const { data: rolesData } = useRoleTemplates({ page_size: 500 });
   const roles = rolesData?.data ?? [];
   const assignRole = useAssignRole();
   const unassignRole = useUnassignRole();
@@ -44,6 +44,11 @@ export function Employees() {
   const [unassignModal, setUnassignModal] = useState<UnassignModalState>({ open: false, nodeId: '', employeeName: '' });
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [selectedMode, setSelectedMode] = useState<'autonomous' | 'copilot'>('autonomous');
+  const [roleDeptFilter, setRoleDeptFilter] = useState<string>('');
+
+  const filteredRoles = roleDeptFilter
+    ? roles.filter(r => r.department === roleDeptFilter)
+    : roles;
 
   const filtered = roleFilter
     ? roleFilter === '__unassigned__'
@@ -234,14 +239,30 @@ export function Employees() {
         }
       >
         <div className="form-group">
-          <label className="form-label">Role</label>
+          <label className="form-label">Department</label>
+          <select
+            className="select"
+            value={roleDeptFilter}
+            onChange={e => setRoleDeptFilter(e.target.value)}
+            style={{ marginBottom: 8 }}
+          >
+            <option value="">All Departments</option>
+            {[...new Set(roles.map(r => r.department).filter((d): d is string => !!d))].sort().map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Role ({filteredRoles.length})</label>
           <select
             className="select"
             value={selectedRoleId}
             onChange={e => setSelectedRoleId(e.target.value)}
+            size={Math.min(12, filteredRoles.length + 1)}
+            style={{ height: 'auto' }}
           >
             <option value="">{t('assignModal.selectRole')}</option>
-            {roles.map(r => (
+            {filteredRoles.map(r => (
               <option key={r.id} value={r.id}>{r.name} ({r.id})</option>
             ))}
           </select>

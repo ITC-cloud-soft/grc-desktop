@@ -8,7 +8,7 @@ import { z } from "zod";
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(500).default(20),
 });
 
 export type PaginationParams = z.infer<typeof paginationSchema>;
@@ -79,7 +79,7 @@ export const a2aSearchSchema = z.object({
   status: z.enum(["pending", "approved", "promoted", "quarantined"]).optional(),
   type: z.enum(["gene", "capsule"]).optional(),
   gene_asset_id: z.string().min(1).max(255).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(500).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

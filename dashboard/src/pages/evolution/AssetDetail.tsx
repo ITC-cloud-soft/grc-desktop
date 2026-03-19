@@ -6,7 +6,7 @@ import { DataTable, Column } from '../../components/DataTable';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/Modal';
 import { ErrorMessage } from '../../components/ErrorMessage';
-import { useAdminAssetDetail, useChangeAssetStatus, AssetReport } from '../../api/hooks';
+import { useAdminAssetDetail, useChangeAssetStatus, useAssetUsage } from '../../api/hooks';
 import { apiClient } from '../../api/client';
 import { useUser } from '../../context/UserContext';
 
@@ -16,6 +16,7 @@ export function AssetDetail() {
   const navigate = useNavigate();
   const { isAdmin } = useUser();
   const { data, isLoading, error } = useAdminAssetDetail(id ?? '');
+  const { data: usageData, isLoading: usageLoading } = useAssetUsage(id ?? '');
   const changeStatus = useChangeAssetStatus();
   const [actionModal, setActionModal] = useState<{ action: string; newStatus: string } | null>(null);
 
@@ -59,7 +60,19 @@ export function AssetDetail() {
     {
       key: 'reporterNodeId',
       label: 'Reporter Node',
-      render: (v) => <span className="mono text-sm">{String(v).slice(0, 20)}...</span>,
+      render: (v, row) => {
+        const name = row?.reporterName as string | null;
+        const role = row?.reporterRole as string | null;
+        if (name) {
+          return (
+            <span className="text-sm">
+              {name}
+              {role && <span className="badge badge-outline" style={{ marginLeft: 6, fontSize: 11 }}>{role}</span>}
+            </span>
+          );
+        }
+        return <span className="mono text-sm">{String(v).slice(0, 20)}...</span>;
+      },
     },
     {
       key: 'reportType',
@@ -207,6 +220,9 @@ export function AssetDetail() {
       {/* Gene/Capsule Content Description */}
       <GeneContentDescription assetId={asset.assetId} contentHash={asset.contentHash} />
 
+      {/* Usage Tracking Section */}
+      <AssetUsageSection assetId={id!} isGene={isGene} loading={usageLoading} data={usageData} />
+
       {/* Strategy / Trigger Data */}
       {isGene && asset.strategy && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -312,6 +328,120 @@ export function AssetDetail() {
         )}
       </Modal>
     </div>
+  );
+}
+
+// ── Asset Usage Section ──────────────────────────────────────────────────
+
+function AssetUsageSection({
+  assetId,
+  isGene,
+  loading,
+  data,
+}: {
+  assetId: string;
+  isGene: boolean;
+  loading: boolean;
+  data: import('../../api/hooks').AssetUsageResponse | undefined;
+}) {
+  if (loading) {
+    return (
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header"><h2 className="card-title">利用状況</h2></div>
+        <div style={{ padding: '1rem' }}><p className="text-muted">Loading...</p></div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const hasCapsules = isGene && data.capsules.length > 0;
+  const hasReporters = data.reporters.length > 0;
+
+  if (!hasCapsules && !hasReporters) {
+    return (
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header"><h2 className="card-title">利用状況</h2></div>
+        <div style={{ padding: '1rem' }}>
+          <p className="text-muted">まだ利用レポートはありません</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Capsules derived from this Gene */}
+      {hasCapsules && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <h2 className="card-title">このGeneを使用するCapsule ({data.capsules.length})</h2>
+          </div>
+          <div style={{ padding: '0 1rem 1rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Asset ID</th>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Node</th>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.capsules.map((c) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.5rem' }}>
+                      <span className="mono text-sm">{c.assetId}</span>
+                    </td>
+                    <td style={{ padding: '0.5rem' }}>
+                      {c.nodeName || <span className="text-muted">-</span>}
+                      {c.role && <span className="badge badge-outline" style={{ marginLeft: 6, fontSize: 11 }}>{c.role}</span>}
+                    </td>
+                    <td style={{ padding: '0.5rem' }}>
+                      <span className={`badge ${c.status === 'promoted' ? 'badge-success' : c.status === 'quarantined' ? 'badge-danger' : 'badge-default'}`}>
+                        {c.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Reporter agents */}
+      {hasReporters && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <h2 className="card-title">利用エージェント ({data.reporters.length}) &mdash; 合計 {data.totalUses} 回</h2>
+          </div>
+          <div style={{ padding: '0 1rem 1rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Agent</th>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Role</th>
+                  <th style={{ textAlign: 'right', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Reports</th>
+                  <th style={{ textAlign: 'left', padding: '0.5rem 0.5rem', color: 'var(--color-text-muted)' }}>Last Used</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.reporters.map((r) => (
+                  <tr key={r.nodeId} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.5rem' }}>{r.nodeName}</td>
+                    <td style={{ padding: '0.5rem' }}>
+                      {r.role ? <span className="badge badge-outline">{r.role}</span> : <span className="text-muted">-</span>}
+                    </td>
+                    <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 600 }}>{r.reportCount}</td>
+                    <td style={{ padding: '0.5rem' }}>{new Date(r.lastUsed).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

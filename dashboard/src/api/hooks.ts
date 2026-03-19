@@ -105,6 +105,32 @@ export interface AssetReport {
   reportType: string;
   details: Record<string, unknown> | null;
   createdAt: string;
+  reporterName: string | null;
+  reporterRole: string | null;
+}
+
+export interface AssetUsageCapsule {
+  id: string;
+  assetId: string;
+  nodeId: string | null;
+  nodeName: string | null;
+  role: string | null;
+  status: string;
+}
+
+export interface AssetUsageReporter {
+  nodeId: string;
+  nodeName: string;
+  role: string | null;
+  reportCount: number;
+  lastUsed: string;
+}
+
+export interface AssetUsageResponse {
+  ok: boolean;
+  capsules: AssetUsageCapsule[];
+  reporters: AssetUsageReporter[];
+  totalUses: number;
 }
 
 export interface AssetDetailResponse {
@@ -395,6 +421,14 @@ export function useAdminAssetDetail(assetId: string) {
     queryKey: ['admin', 'asset', assetId],
     queryFn: () =>
       apiClient.get<AssetDetailResponse>(`/api/v1/admin/evolution/assets/${assetId}`),
+    enabled: !!assetId,
+  });
+}
+
+export function useAssetUsage(assetId: string) {
+  return useQuery<AssetUsageResponse>({
+    queryKey: ['admin', 'evolution', 'asset-usage', assetId],
+    queryFn: () => apiClient.get<AssetUsageResponse>(`/api/v1/admin/evolution/assets/${assetId}/usage`),
     enabled: !!assetId,
   });
 }

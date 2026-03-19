@@ -8,7 +8,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, count } from "drizzle-orm";
 import path from "node:path";
 import fs from "node:fs";
 import pino from "pino";
@@ -178,8 +178,20 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
       if (geneRows.length > 0) {
         const reports = await db
-          .select()
+          .select({
+            id: assetReportsTable.id,
+            assetId: assetReportsTable.assetId,
+            assetType: assetReportsTable.assetType,
+            reporterNodeId: assetReportsTable.reporterNodeId,
+            reporterUserId: assetReportsTable.reporterUserId,
+            reportType: assetReportsTable.reportType,
+            details: assetReportsTable.details,
+            createdAt: assetReportsTable.createdAt,
+            reporterName: nodesTable.employeeName,
+            reporterRole: nodesTable.roleId,
+          })
           .from(assetReportsTable)
+          .leftJoin(nodesTable, eq(assetReportsTable.reporterNodeId, nodesTable.nodeId))
           .where(eq(assetReportsTable.assetId, geneRows[0].assetId))
           .orderBy(desc(assetReportsTable.createdAt));
 
@@ -196,8 +208,20 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
       if (capsuleRows.length > 0) {
         const reports = await db
-          .select()
+          .select({
+            id: assetReportsTable.id,
+            assetId: assetReportsTable.assetId,
+            assetType: assetReportsTable.assetType,
+            reporterNodeId: assetReportsTable.reporterNodeId,
+            reporterUserId: assetReportsTable.reporterUserId,
+            reportType: assetReportsTable.reportType,
+            details: assetReportsTable.details,
+            createdAt: assetReportsTable.createdAt,
+            reporterName: nodesTable.employeeName,
+            reporterRole: nodesTable.roleId,
+          })
           .from(assetReportsTable)
+          .leftJoin(nodesTable, eq(assetReportsTable.reporterNodeId, nodesTable.nodeId))
           .where(eq(assetReportsTable.assetId, capsuleRows[0].assetId))
           .orderBy(desc(assetReportsTable.createdAt));
 
@@ -1206,6 +1230,137 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           connected: true,
           last_heartbeat: n.lastHeartbeat,
         })),
+      });
+    }),
+  );
+
+  // ── GET /assets/:id/usage — Usage tracking: capsules derived from a gene + reporter breakdown ──
+
+  router.get(
+    "/assets/:id/usage",
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const db = getDb();
+      const id = uuidSchema.parse(req.params.id);
+
+      // Determine asset type and assetId
+      let assetId: string | null = null;
+      let assetType: "gene" | "capsule" | null = null;
+
+      const geneRows = await db
+        .select({ assetId: genesTable.assetId })
+        .from(genesTable)
+        .where(eq(genesTable.id, id))
+        .limit(1);
+
+      if (geneRows.length > 0) {
+        assetId = geneRows[0].assetId;
+        assetType = "gene";
+      } else {
+        const capsuleRows = await db
+          .select({ assetId: capsulesTable.assetId })
+          .from(capsulesTable)
+          .where(eq(capsulesTable.id, id))
+          .limit(1);
+        if (capsuleRows.length > 0) {
+          assetId = capsuleRows[0].assetId;
+          assetType = "capsule";
+        }
+      }
+
+      if (!assetId || !assetType) {
+        throw new NotFoundError("Asset");
+      }
+
+      // If asset is a gene, find capsules that reference this gene
+      let capsules: Array<Record<string, unknown>> = [];
+      if (assetType === "gene") {
+        const capsuleRows = await db
+          .select({
+            id: capsulesTable.id,
+            assetId: capsulesTable.assetId,
+            nodeId: capsulesTable.nodeId,
+            status: capsulesTable.status,
+          })
+          .from(capsulesTable)
+          .where(eq(capsulesTable.geneAssetId, assetId));
+
+        // LEFT JOIN with nodes to get employee name + role
+        const nodeIds = capsuleRows
+          .map((c) => c.nodeId)
+          .filter((nid): nid is string => !!nid);
+        const uniqueNodeIds = [...new Set(nodeIds)];
+
+        let nodeMap: Record<string, { employeeName: string | null; roleId: string | null }> = {};
+        if (uniqueNodeIds.length > 0) {
+          const nodeRows = await db
+            .select({
+              nodeId: nodesTable.nodeId,
+              employeeName: nodesTable.employeeName,
+              roleId: nodesTable.roleId,
+            })
+            .from(nodesTable)
+            .where(inArray(nodesTable.nodeId, uniqueNodeIds));
+          for (const n of nodeRows) {
+            nodeMap[n.nodeId] = { employeeName: n.employeeName, roleId: n.roleId };
+          }
+        }
+
+        capsules = capsuleRows.map((c) => ({
+          id: c.id,
+          assetId: c.assetId,
+          nodeId: c.nodeId,
+          nodeName: (c.nodeId && nodeMap[c.nodeId]?.employeeName) || c.nodeId || null,
+          role: (c.nodeId && nodeMap[c.nodeId]?.roleId) || null,
+          status: c.status,
+        }));
+      }
+
+      // Aggregate reports grouped by reporter node
+      const reportAgg = await db
+        .select({
+          reporterNodeId: assetReportsTable.reporterNodeId,
+          reportCount: sql<number>`COUNT(*)`,
+          lastUsed: sql<string>`MAX(${assetReportsTable.createdAt})`,
+        })
+        .from(assetReportsTable)
+        .where(eq(assetReportsTable.assetId, assetId))
+        .groupBy(assetReportsTable.reporterNodeId);
+
+      // Enrich with node names
+      const reporterNodeIds = reportAgg.map((r) => r.reporterNodeId);
+      const uniqueReporterNodeIds = [...new Set(reporterNodeIds)];
+
+      let reporterNodeMap: Record<string, { employeeName: string | null; roleId: string | null }> = {};
+      if (uniqueReporterNodeIds.length > 0) {
+        const nodeRows = await db
+          .select({
+            nodeId: nodesTable.nodeId,
+            employeeName: nodesTable.employeeName,
+            roleId: nodesTable.roleId,
+          })
+          .from(nodesTable)
+          .where(inArray(nodesTable.nodeId, uniqueReporterNodeIds));
+        for (const n of nodeRows) {
+          reporterNodeMap[n.nodeId] = { employeeName: n.employeeName, roleId: n.roleId };
+        }
+      }
+
+      const reporters = reportAgg.map((r) => ({
+        nodeId: r.reporterNodeId,
+        nodeName: reporterNodeMap[r.reporterNodeId]?.employeeName || r.reporterNodeId,
+        role: reporterNodeMap[r.reporterNodeId]?.roleId || null,
+        reportCount: Number(r.reportCount),
+        lastUsed: r.lastUsed,
+      }));
+
+      const totalUses = reporters.reduce((sum, r) => sum + r.reportCount, 0);
+
+      res.json({
+        ok: true,
+        capsules,
+        reporters,
+        totalUses,
       });
     }),
   );

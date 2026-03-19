@@ -10,6 +10,7 @@ import { getDb } from "../../shared/db/connection.js";
 import { nodesTable } from "../evolution/schema.js";
 import { inArray } from "drizzle-orm";
 import type { MeetingService } from "./service.js";
+import { nodeConfigSSE } from "../evolution/node-config-sse.js";
 
 const log = pino({ name: "meetings:scheduled" });
 
@@ -65,10 +66,44 @@ export class ScheduledMeetingManager {
     this.meetingServiceGetter = meetingServiceGetter;
   }
 
-  start(): void {
-    // Check every minute
+  async start(): Promise<void> {
+    // Check for missed meetings on startup
+    await this.checkMissed().catch(err => log.warn({ err }, "Failed to check missed meetings"));
+
+    // Start regular interval
     this.timer = setInterval(() => this.check(), 60_000);
     log.info(`Scheduled meeting manager started with ${WEEKLY_MEETINGS.filter(m => m.enabled).length} meetings`);
+  }
+
+  /**
+   * Check for meetings that should have fired today but were missed
+   * (e.g. server was down at the scheduled time).
+   */
+  private async checkMissed(): Promise<void> {
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (const config of WEEKLY_MEETINGS) {
+      if (!config.enabled) continue;
+      if (now.getDay() !== config.dayOfWeek) continue;
+
+      const scheduledMinutes = config.hour * 60 + config.minute;
+      if (currentMinutes <= scheduledMinutes) continue; // Not yet past the scheduled time
+
+      const key = `${config.name}-${today}`;
+      if (this.lastTriggered.has(key)) continue; // Already triggered today
+
+      log.info({ name: config.name, scheduledHour: config.hour, scheduledMinute: config.minute },
+        "Recovering missed scheduled meeting");
+      this.lastTriggered.set(key, today);
+
+      try {
+        await this.createMeeting(config);
+      } catch (err) {
+        log.error({ err, name: config.name }, "Failed to create missed scheduled meeting");
+      }
+    }
   }
 
   private async check(): Promise<void> {
@@ -139,6 +174,27 @@ export class ScheduledMeetingManager {
     // Auto-start
     await service.startMeeting(meeting.id);
     log.info({ name: config.name, meetingId: meeting.id, participants: nodes.length }, "Scheduled meeting created and started");
+
+    // Send SSE notifications to all participants
+    for (const node of nodes) {
+      try {
+        nodeConfigSSE.pushMeetingEvent(node.nodeId, {
+          event_type: "meeting_started",
+          session_id: meeting.id,
+          title: config.title,
+          type: config.type,
+          shared_context: config.sharedContext,
+          facilitator_node_id: facilitator.nodeId,
+          participants: nodes.map(n => ({
+            node_id: n.nodeId,
+            role_id: n.roleId ?? "unknown",
+            display_name: n.displayName ?? n.roleId ?? n.nodeId,
+          })),
+        });
+      } catch (err) {
+        log.warn({ err, nodeId: node.nodeId }, "Failed to send meeting SSE notification");
+      }
+    }
   }
 
   stop(): void {

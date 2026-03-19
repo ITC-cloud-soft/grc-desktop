@@ -8,7 +8,6 @@ import { ErrorMessage } from '../../components/ErrorMessage';
 import { useAdminAssets, useChangeAssetStatus, Asset } from '../../api/hooks';
 import { useUser } from '../../context/UserContext';
 
-const ASSET_TYPES = ['gene', 'capsule'];
 const STATUSES = ['pending', 'approved', 'promoted', 'quarantined', 'rejected'];
 const CATEGORIES = ['reasoning', 'coding', 'data', 'communication', 'research', 'creative', 'other'];
 
@@ -16,7 +15,8 @@ export function Assets() {
   const { t } = useTranslation('evolution');
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  const [assetType, setAssetType] = useState('');
+  const [activeTab, setActiveTab] = useState<'gene' | 'capsule'>('gene');
+  const [assetType, setAssetType] = useState('gene');
   const [status, setStatus] = useState('approved');
   const [category, setCategory] = useState('');
   const [actionModal, setActionModal] = useState<{ asset: Asset; action: string; newStatus: string } | null>(null);
@@ -31,51 +31,48 @@ export function Assets() {
   });
   const changeStatus = useChangeAssetStatus();
 
-  const columns: Column<Record<string, unknown>>[] = [
-    {
-      key: 'id',
-      label: t('assets.table.assetId'),
-      render: (v) => (
-        <a
-          href={`/evolution/assets/${String(v)}`}
-          onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${String(v)}`); }}
-          className="mono text-sm link"
-        >
-          {String(v).slice(0, 12)}...
-        </a>
-      ),
+  const adminActions: Column<Record<string, unknown>> = {
+    key: 'actions',
+    label: t('assets.table.actions'),
+    render: (_, row) => {
+      const asset = row as unknown as Asset;
+      const actions = [
+        { label: t('assets.actions.promote'), newStatus: 'promoted' },
+        { label: t('assets.actions.approve'), newStatus: 'approved' },
+        { label: t('assets.actions.quarantine'), newStatus: 'quarantined' },
+      ];
+      return (
+        <div className="action-group">
+          {actions.map(({ label, newStatus }) => (
+            <button
+              key={newStatus}
+              className={`btn btn-sm ${newStatus === 'quarantined' ? 'btn-danger' : newStatus === 'promoted' ? 'btn-primary' : 'btn-default'}`}
+              onClick={() => setActionModal({ asset, action: label, newStatus })}
+              disabled={asset.status === newStatus}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      );
     },
-    {
-      key: 'assetType',
-      label: t('assets.table.type'),
-      render: (v) => (
-        <StatusBadge
-          status={String(v)}
-          variant={v === 'gene' ? 'info' : 'default'}
-        />
-      ),
-    },
+  };
+
+  const geneColumns: Column<Record<string, unknown>>[] = [
     {
       key: 'assetId',
       label: t('assets.table.assetRef'),
       render: (v, row) => {
         const a = row as unknown as Asset;
         return (
-          <div>
-            <a
-              href={`/evolution/assets/${a.id}`}
-              onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${a.id}`); }}
-              className="mono text-sm link"
-              title={String(v)}
-            >
-              {String(v).length > 20 ? `${String(v).slice(0, 20)}...` : String(v)}
-            </a>
-            {a.assetType === 'capsule' && a.geneAssetId && (
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                → {a.geneAssetId}
-              </div>
-            )}
-          </div>
+          <a
+            href={`/evolution/assets/${a.id}`}
+            onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${a.id}`); }}
+            className="mono text-sm link"
+            title={String(v)}
+          >
+            {String(v).length > 24 ? `${String(v).slice(0, 24)}…` : String(v)}
+          </a>
         );
       },
     },
@@ -85,9 +82,32 @@ export function Assets() {
       render: (v) => v ? <StatusBadge status={String(v)} variant="default" /> : <span className="text-muted">—</span>,
     },
     {
+      key: 'signalsMatch',
+      label: t('assets.table.signals'),
+      render: (v) => {
+        const signals = Array.isArray(v) ? (v as string[]) : [];
+        if (signals.length === 0) return <span className="text-muted">—</span>;
+        return (
+          <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            {signals.slice(0, 3).map((s) => (
+              <span key={s} className="badge badge-outline" style={{ fontSize: 10 }}>{s}</span>
+            ))}
+            {signals.length > 3 && (
+              <span className="text-muted text-sm">+{signals.length - 3}</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: 'status',
       label: t('assets.table.status'),
       render: (v) => <StatusBadge status={String(v)} />,
+    },
+    {
+      key: 'capsuleCount',
+      label: t('assets.table.capsules'),
+      render: () => <span className="text-muted">0</span>,
     },
     {
       key: 'useCount',
@@ -106,54 +126,77 @@ export function Assets() {
         );
       },
     },
+    ...(isAdmin ? [adminActions] : []),
+  ];
+
+  const capsuleColumns: Column<Record<string, unknown>>[] = [
     {
-      key: 'safetyScore',
-      label: t('assets.table.safety'),
+      key: 'assetId',
+      label: t('assets.table.assetRef'),
+      render: (v, row) => {
+        const a = row as unknown as Asset;
+        return (
+          <a
+            href={`/evolution/assets/${a.id}`}
+            onClick={(e) => { e.preventDefault(); navigate(`/evolution/assets/${a.id}`); }}
+            className="mono text-sm link"
+            title={String(v)}
+          >
+            {String(v).length > 24 ? `${String(v).slice(0, 24)}…` : String(v)}
+          </a>
+        );
+      },
+    },
+    {
+      key: 'geneAssetId',
+      label: t('assets.table.parentGene'),
+      render: (v, row) => {
+        const a = row as unknown as Asset;
+        if (!v) return <span className="text-muted">—</span>;
+        const ref = String(v);
+        return (
+          <span
+            className="mono text-sm link"
+            style={{ cursor: 'pointer' }}
+            onClick={() => a.geneAssetId && navigate(`/evolution/assets?ref=${encodeURIComponent(a.geneAssetId)}`)}
+          >
+            🧬 {ref.length > 25 ? `${ref.slice(0, 25)}…` : ref}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'nodeId',
+      label: t('assets.table.creator'),
+      render: (v) => {
+        if (!v) return <span className="text-muted">—</span>;
+        const id = String(v);
+        return <span className="mono text-sm">{id.length > 16 ? `${id.slice(0, 16)}…` : id}</span>;
+      },
+    },
+    {
+      key: 'confidence',
+      label: t('assets.table.confidence'),
       render: (v) => {
         if (v === null || v === undefined) return <span className="text-muted">—</span>;
-        const score = Number(v);
-        return (
-          <div className="score-bar-wrapper">
-            <div className="score-bar">
-              <div
-                className="score-bar-fill"
-                style={{
-                  width: `${score * 100}%`,
-                  background: score >= 0.8 ? '#06d6a0' : score >= 0.5 ? '#ffbe0b' : '#ff006e',
-                }}
-              />
-            </div>
-            <span className="score-label">{(score * 100).toFixed(0)}</span>
-          </div>
-        );
+        const pct = Number(v) * 100;
+        return <span>{pct.toFixed(1)}%</span>;
       },
     },
     {
-      key: 'actions',
-      label: t('assets.table.actions'),
-      render: (_, row) => {
-        const asset = row as unknown as Asset;
-        const actions = [
-          { label: t('assets.actions.promote'), newStatus: 'promoted' },
-          { label: t('assets.actions.approve'), newStatus: 'approved' },
-          { label: t('assets.actions.quarantine'), newStatus: 'quarantined' },
-        ];
-        return (
-          <div className="action-group">
-            {actions.map(({ label, newStatus }) => (
-              <button
-                key={newStatus}
-                className={`btn btn-sm ${newStatus === 'quarantined' ? 'btn-danger' : newStatus === 'promoted' ? 'btn-primary' : 'btn-default'}`}
-                onClick={() => setActionModal({ asset, action: label, newStatus })}
-                disabled={asset.status === newStatus}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        );
+      key: 'successStreak',
+      label: t('assets.table.successStreak'),
+      render: (v) => {
+        if (v === null || v === undefined) return <span className="text-muted">—</span>;
+        return <span>{Number(v)}</span>;
       },
     },
+    {
+      key: 'status',
+      label: t('assets.table.status'),
+      render: (v) => <StatusBadge status={String(v)} />,
+    },
+    ...(isAdmin ? [adminActions] : []),
   ];
 
   async function handleAction() {
@@ -161,6 +204,8 @@ export function Assets() {
     await changeStatus.mutateAsync({ assetId: actionModal.asset.id, status: actionModal.newStatus });
     setActionModal(null);
   }
+
+  const activeColumns = activeTab === 'gene' ? geneColumns : capsuleColumns;
 
   return (
     <div className="page">
@@ -172,23 +217,38 @@ export function Assets() {
       {error && <ErrorMessage error={error as Error} />}
 
       <div className="card">
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button
+            className={`btn ${activeTab === 'gene' ? 'btn-primary' : 'btn-default'}`}
+            onClick={() => { setActiveTab('gene'); setAssetType('gene'); setPage(1); }}
+          >
+            🧬 {t('assets.tabs.gene')}
+          </button>
+          <button
+            className={`btn ${activeTab === 'capsule' ? 'btn-primary' : 'btn-default'}`}
+            onClick={() => { setActiveTab('capsule'); setAssetType('capsule'); setPage(1); }}
+          >
+            💊 {t('assets.tabs.capsule')}
+          </button>
+        </div>
+
+        {/* Filters */}
         <div className="filter-bar">
-          <select className="select" value={assetType} onChange={(e) => { setAssetType(e.target.value); setPage(1); }}>
-            <option value="">{t('assets.filters.allTypes')}</option>
-            {ASSET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
           <select className="select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">{t('assets.filters.allStatuses')}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
-            <option value="">{t('assets.filters.allCategories')}</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          {activeTab === 'gene' && (
+            <select className="select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
+              <option value="">{t('assets.filters.allCategories')}</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
         </div>
 
         <DataTable
-          columns={isAdmin ? columns : columns.filter(c => c.label !== t('assets.table.actions'))}
+          columns={activeColumns}
           data={(data?.data ?? []) as unknown as Record<string, unknown>[]}
           loading={isLoading}
           rowKey="id"

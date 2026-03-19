@@ -55,6 +55,7 @@ const KNOWN_DEPARTMENTS = [
 ];
 
 const PAGE_SIZE = 20;
+const FETCH_ALL = 500; // Fetch all roles for client-side search
 
 export function RoleTemplates() {
   const { t } = useTranslation('roles');
@@ -67,13 +68,23 @@ export function RoleTemplates() {
   const [deptFilter, setDeptFilter] = useState('');
 
   const { data: rolesData, isLoading, error } = useRoleTemplates({
-    page,
-    page_size: PAGE_SIZE,
-    department: deptFilter || undefined,
-    mode: modeFilter || undefined,
+    page_size: FETCH_ALL,
   });
 
-  const roles = rolesData?.data ?? [];
+  const allRoles = rolesData?.data ?? [];
+
+  // Client-side filtering
+  const roles = allRoles.filter(r => {
+    const s = search.toLowerCase();
+    const matchSearch = !search || r.name.toLowerCase().includes(s) || r.id.toLowerCase().includes(s) || (r.department || '').toLowerCase().includes(s);
+    const matchMode = !modeFilter || r.mode === modeFilter;
+    const matchDept = !deptFilter || r.department === deptFilter;
+    return matchSearch && matchMode && matchDept;
+  });
+
+  // Client-side pagination
+  const totalFiltered = roles.length;
+  const pagedRoles = roles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const cloneRole = useCloneRole();
   const deleteRole = useDeleteRole();
 
@@ -82,13 +93,7 @@ export function RoleTemplates() {
   const [newId, setNewId] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
 
-  const s = search.toLowerCase();
-  const filtered = roles.filter(r => {
-    const matchSearch = !search || r.name.toLowerCase().includes(s) || r.id.toLowerCase().includes(s) || (r.department || '').toLowerCase().includes(s);
-    return matchSearch;
-  });
-
-  const total = rolesData?.pagination?.total ?? 0;
+  const total = totalFiltered;
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
@@ -245,13 +250,13 @@ export function RoleTemplates() {
           ))}
         </select>
         <span className="text-muted" style={{ fontSize: '0.875rem' }}>
-          {filtered.length} role{filtered.length !== 1 ? 's' : ''}
+          {totalFiltered} role{totalFiltered !== 1 ? 's' : ''}
         </span>
       </div>
 
       <DataTable
         columns={columns as never}
-        data={filtered as never}
+        data={pagedRoles as never}
         loading={isLoading}
         rowKey="id"
       />

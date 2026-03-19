@@ -32,6 +32,8 @@ const meetingListQuerySchema = paginationSchema.extend({
     .enum(["discussion", "review", "brainstorm", "decision"])
     .optional(),
   initiator_type: z.enum(["human", "agent"]).optional(),
+  scheduled_after: z.string().datetime().optional(),
+  scheduled_before: z.string().datetime().optional(),
 });
 
 const createMeetingSchema = z.object({
@@ -154,6 +156,8 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         status: query.status,
         type: query.type,
         initiatorType: query.initiator_type,
+        scheduledAfter: query.scheduled_after ? new Date(query.scheduled_after) : undefined,
+        scheduledBefore: query.scheduled_before ? new Date(query.scheduled_before) : undefined,
       });
       res.json(result);
     }),

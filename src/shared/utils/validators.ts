@@ -61,6 +61,8 @@ export const a2aHelloSchema = z.object({
   employee_id: z.string().max(100).optional(),
   employee_name: z.string().max(255).optional(),
   employee_email: z.string().max(255).optional(),
+  employee_role: z.string().max(100).optional(),
+  workspace_path: z.string().max(500).regex(/^[a-zA-Z0-9_\-\/\\:. ]+$/, "Invalid path characters").optional(),
 });
 
 export const a2aPublishSchema = z.object({

@@ -1,0 +1,13 @@
+export { WidgetGrid } from './WidgetGrid';
+export { StatWidget } from './StatWidget';
+export { TaskSummaryWidget } from './TaskSummaryWidget';
+export { CommunityFeedWidget } from './CommunityFeedWidget';
+export { MessageQueueWidget } from './MessageQueueWidget';
+export { TodayMeetingsWidget } from './TodayMeetingsWidget';
+export { WeeklyMVPWidget } from './WeeklyMVPWidget';
+export { ReviewTasksWidget } from './ReviewTasksWidget';
+export { SSEStatusWidget } from './SSEStatusWidget';
+export { PipelineSummaryWidget } from './PipelineSummaryWidget';
+export { KPISummaryWidget } from './KPISummaryWidget';
+export { useWidgetConfig } from './useWidgetConfig';
+export type { WidgetId, WidgetConfig, WidgetGridConfig, WidgetSize } from './types';

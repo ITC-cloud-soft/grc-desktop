@@ -1,92 +1,17 @@
 # ─────────────────────────────────────────────────
-# GRC Docker Compose — Modular Monolith Deployment
+# GRC Docker Compose — Local Development Support
 #
 # Services:
-#   grc-server     — Express API (all 6 modules)
-#   mysql          — MySQL 8.0 database
 #   redis          — Cache + session store
-#   (Azure Blob Storage for skill tarballs — external service)
 #   meilisearch    — Full-text search engine
-#   nginx          — TLS termination + reverse proxy
+#
+# Note: GRC Server (frontend:3200, backend:3100) runs locally
+# Note: MySQL runs on Azure (13.78.81.86:18306)
 # ─────────────────────────────────────────────────
 
 version: "3.8"
 
 services:
-  # ── GRC Server (Modular Monolith) ────────────────
-  grc-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: grc-server
-    restart: unless-stopped
-    ports:
-      - "3100:3100"
-    environment:
-      - NODE_ENV=production
-      - PORT=3100
-      - DATABASE_URL=mysql://grc:${MYSQL_PASSWORD:-grc_secret}@mysql:3306/grc-server
-      - REDIS_URL=redis://redis:6379
-      - AZURE_STORAGE_ACCOUNT_NAME=${AZURE_STORAGE_ACCOUNT_NAME}
-      - AZURE_STORAGE_ACCOUNT_KEY=${AZURE_STORAGE_ACCOUNT_KEY}
-      - AZURE_STORAGE_CONTAINER_NAME=${AZURE_STORAGE_CONTAINER_NAME:-skills}
-      - MEILISEARCH_URL=http://meilisearch:7700
-      - MEILISEARCH_KEY=${MEILISEARCH_KEY:-grc-meili-key}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - JWT_ISSUER=grc.winclawhub.ai
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
-      - GITHUB_CALLBACK_URL=https://grc.winclawhub.ai/auth/github/callback
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_CALLBACK_URL=https://grc.winclawhub.ai/auth/google/callback
-      - GRC_MODULE_AUTH=true
-      - GRC_MODULE_CLAWHUB=true
-      - GRC_MODULE_EVOLUTION=true
-      - GRC_MODULE_UPDATE=true
-      - GRC_MODULE_TELEMETRY=true
-      - GRC_MODULE_COMMUNITY=false
-      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  # ── MySQL 8.0 ────────────────────────────────────
-  mysql:
-    image: mysql:8.0
-    container_name: grc-mysql
-    restart: unless-stopped
-    ports:
-      - "3306:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
-      - MYSQL_DATABASE=grc-server
-      - MYSQL_USER=grc
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-grc_secret}
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./src/shared/db/migrations:/docker-entrypoint-initdb.d
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=mysql_native_password
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   # ── Redis 7 ──────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -122,22 +47,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # ── Nginx (Reverse Proxy + TLS) ──────────────────
-  nginx:
-    image: nginx:alpine
-    container_name: grc-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # Mount TLS certs here for production
-      # - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      - grc-server
-
 volumes:
-  mysql_data:
   redis_data:
   meili_data:

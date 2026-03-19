@@ -39,13 +39,15 @@ export interface TaskSSEEvent {
 }
 
 export interface RelaySSEEvent {
-  event_type: "relay_message" | "message_read";
+  event_type: "relay_message" | "message_read" | "priority_escalated";
   message_id: string;
   from_node_id?: string;
   message_type?: string;
   subject?: string | null;
   payload?: unknown;
   priority?: string;
+  new_priority?: string;
+  reason?: string;
   created_at?: string;
   read_by?: string;
   read_at?: string;

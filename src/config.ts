@@ -72,6 +72,7 @@ export interface GrcConfig {
     "a2a-gateway": boolean;
     meetings: boolean;
     "model-keys": boolean;
+    messaging: boolean;
   };
 
   smtp: {
@@ -276,6 +277,7 @@ export function loadConfig(): GrcConfig {
       "a2a-gateway": envBool("GRC_MODULE_A2A_GATEWAY", true),
       meetings: envBool("GRC_MODULE_MEETINGS", true),
       "model-keys": envBool("GRC_MODULE_MODEL_KEYS", true),
+      messaging: envBool("GRC_MODULE_MESSAGING", true),
     },
 
     admin: {

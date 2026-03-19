@@ -22,7 +22,7 @@ import {
 export const agentCardsTable = mysqlTable(
   "agent_cards",
   {
-    nodeId: char("node_id", { length: 36 }).primaryKey().notNull(),
+    nodeId: varchar("node_id", { length: 128 }).primaryKey().notNull(),
     agentCard: json("agent_card").notNull(),
     skills: json("skills"),
     capabilities: json("capabilities"),

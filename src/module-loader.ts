@@ -115,6 +115,11 @@ export async function loadModules(
         name: "model-keys",
         register: m.register,
       })),
+    messaging: () =>
+      import("./modules/messaging/routes.js").then((m) => ({
+        name: "messaging",
+        register: m.register,
+      })),
   };
 
   const adminModuleMap: Record<

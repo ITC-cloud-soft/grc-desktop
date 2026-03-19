@@ -242,6 +242,33 @@ export function Nodes() {
       },
     },
     {
+      key: 'workspacePath',
+      label: t('nodes.table.workspacePath'),
+      render: (v) => {
+        const path = v as string | null;
+        if (!path) return <span className="text-muted">—</span>;
+        const explorerCmd = `explorer ${path}`;
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '14px' }}>&#128194;</span>
+            <code style={{ fontSize: '11px', background: 'var(--color-bg-secondary, #f3f4f6)', padding: '2px 5px', borderRadius: '4px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', verticalAlign: 'middle' }} title={path}>
+              {path}
+            </code>
+            <button
+              title={t('nodes.table.copyWorkspacePath')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: '14px', lineHeight: 1, color: 'var(--color-text-secondary, #6b7280)', flexShrink: 0 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(explorerCmd).catch(() => { /* ignore */ });
+              }}
+            >
+              &#128203;
+            </button>
+          </span>
+        );
+      },
+    },
+    {
       key: 'winclawVersion',
       label: t('nodes.table.version'),
       render: (v) => v ? <span className="mono">{String(v)}</span> : <span className="text-muted">-</span>,

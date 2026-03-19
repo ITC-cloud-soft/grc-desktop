@@ -50,6 +50,11 @@ import { AutoTriggers } from './pages/meetings/AutoTriggers';
 import { RelayLog } from './pages/relay/RelayLog';
 // Settings
 import { Settings } from './pages/settings/Settings';
+// Phase 1 new pages
+import { CampaignCalendar } from './pages/campaigns/CampaignCalendar';
+import { PipelineBoard } from './pages/pipeline/PipelineBoard';
+import { Roadmap } from './pages/roadmap/Roadmap';
+import { KPIDashboard } from './pages/kpi/KPIDashboard';
 
 export function App() {
   return (
@@ -94,6 +99,11 @@ export function App() {
               <Route path="/meetings/:id" element={<AdminRoute><MeetingDetail /></AdminRoute>} />
               {/* A2A Relay (admin) */}
               <Route path="/relay" element={<AdminRoute><RelayLog /></AdminRoute>} />
+              {/* Phase 1 new pages (admin) */}
+              <Route path="/campaigns" element={<AdminRoute><CampaignCalendar /></AdminRoute>} />
+              <Route path="/pipeline" element={<AdminRoute><PipelineBoard /></AdminRoute>} />
+              <Route path="/roadmap" element={<AdminRoute><Roadmap /></AdminRoute>} />
+              <Route path="/kpi" element={<AdminRoute><KPIDashboard /></AdminRoute>} />
               {/* Regular authenticated routes */}
               <Route path="/skills" element={<Skills />} />
               <Route path="/skills/stats" element={<SkillStats />} />

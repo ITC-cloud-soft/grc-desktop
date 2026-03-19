@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, sql, and, asc } from "drizzle-orm";
+import { eq, desc, sql, and, asc, gte, lte } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
 import {
@@ -142,6 +142,8 @@ export class MeetingService {
     status?: string;
     type?: string;
     initiatorType?: string;
+    scheduledAfter?: Date;
+    scheduledBefore?: Date;
   }) {
     const db = getDb();
     const offset = (opts.page - 1) * opts.limit;
@@ -161,6 +163,12 @@ export class MeetingService {
       conditions.push(
         eq(meetingSessionsTable.initiatorType, opts.initiatorType as "human" | "agent"),
       );
+    }
+    if (opts.scheduledAfter) {
+      conditions.push(gte(meetingSessionsTable.scheduledAt, opts.scheduledAfter));
+    }
+    if (opts.scheduledBefore) {
+      conditions.push(lte(meetingSessionsTable.scheduledAt, opts.scheduledBefore));
     }
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

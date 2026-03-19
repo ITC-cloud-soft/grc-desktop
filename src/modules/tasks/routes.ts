@@ -14,6 +14,7 @@ import { createAuthMiddleware } from "../../shared/middleware/auth.js";
 import { asyncHandler, BadRequestError } from "../../shared/middleware/error-handler.js";
 import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { TasksService } from "./service.js";
+import { ScheduledReviewNotifier } from "./scheduled-review.js";
 
 const logger = pino({ name: "module:tasks" });
 
@@ -340,6 +341,10 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
   // ── Mount router under /a2a/tasks prefix ───
   app.use("/a2a/tasks", router);
+
+  // ── Start weekly review notifier ──────────────
+  const reviewNotifier = new ScheduledReviewNotifier();
+  reviewNotifier.start();
 
   logger.info("Tasks module registered — 7 A2A endpoints active");
 }

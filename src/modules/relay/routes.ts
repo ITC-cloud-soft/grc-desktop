@@ -16,6 +16,7 @@ import { createAuthMiddleware } from "../../shared/middleware/auth.js";
 import {
   asyncHandler,
   BadRequestError,
+  ForbiddenError,
   NotFoundError,
 } from "../../shared/middleware/error-handler.js";
 import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
@@ -130,7 +131,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
               postType: "alert" as import("../../shared/interfaces/community.interface.js").PostType,
               title: `[Important] ${body.subject ?? "High-priority message"}`,
               contextData: {
-                body: `**From**: ${body.from_node_id.slice(0, 16)}...\n**To**: ${body.to_node_id.slice(0, 16)}...\n**Type**: ${body.message_type}\n\n${(body.payload as Record<string, unknown>)?.body ?? ""}`,
+                body: `**From**: ${body.from_node_id.slice(0, 16)}...\n**To**: ${body.to_node_id.slice(0, 16)}...\n**Type**: ${body.message_type}\n\n_[内容は機密のため省略]_`,
                 tags: ["auto-relay", "high-priority"],
                 auto_generated: true,
               },
@@ -271,6 +272,80 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         ok: true,
         message_id: body.message_id,
         status: "acknowledged",
+      });
+    }),
+  );
+
+  // ────────────────────────────────────────────
+  // POST /a2a/relay/escalate — Escalate message priority (admin/ceo only)
+  // ────────────────────────────────────────────
+  const relayEscalateSchema = z.object({
+    message_id: z.string().uuid(),
+    new_priority: z.enum(["critical", "high"]),
+    reason: z.string().max(1000).optional(),
+  });
+
+  router.post(
+    "/relay/escalate",
+    authRequired,
+    asyncHandler(async (req: Request, res: Response) => {
+      // Only admin or ceo role can escalate
+      const callerRole = req.auth?.role as string | undefined;
+      if (callerRole !== "admin" && callerRole !== "ceo") {
+        throw new ForbiddenError("Only admin or ceo role can escalate message priority");
+      }
+
+      const body = relayEscalateSchema.parse(req.body);
+      const db = getDb();
+
+      // Fetch the message
+      const rows = await db
+        .select()
+        .from(a2aRelayQueueTable)
+        .where(eq(a2aRelayQueueTable.id, body.message_id))
+        .limit(1);
+
+      if (rows.length === 0) {
+        throw new NotFoundError("Message");
+      }
+
+      const message = rows[0];
+      const previousPriority = message.priority;
+
+      // Update priority in DB
+      await db
+        .update(a2aRelayQueueTable)
+        .set({ priority: body.new_priority })
+        .where(eq(a2aRelayQueueTable.id, body.message_id));
+
+      // Push SSE notification to the target node
+      if (nodeConfigSSE.isNodeConnected(message.toNodeId)) {
+        nodeConfigSSE.pushRelayEvent(message.toNodeId, {
+          event_type: "priority_escalated",
+          message_id: body.message_id,
+          from_node_id: message.fromNodeId,
+          priority: previousPriority,
+          new_priority: body.new_priority,
+          reason: body.reason,
+        });
+      }
+
+      logger.info(
+        {
+          messageId: body.message_id,
+          from: previousPriority,
+          to: body.new_priority,
+          escalatedBy: req.auth?.sub,
+        },
+        "Message priority escalated",
+      );
+
+      res.json({
+        ok: true,
+        message_id: body.message_id,
+        previous_priority: previousPriority,
+        new_priority: body.new_priority,
+        reason: body.reason ?? null,
       });
     }),
   );
@@ -427,5 +502,5 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
   // ── Mount router under /a2a prefix ────────
   app.use("/a2a", router);
 
-  logger.info("Relay module registered — 5 A2A endpoints active");
+  logger.info("Relay module registered — 6 A2A endpoints active");
 }

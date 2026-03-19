@@ -881,6 +881,25 @@ export class TasksService {
         logger.warn({ taskId: id, err }, "Failed to auto-post task completion to community");
       }
 
+      // Auto-publish gene to Evolution Pool
+      try {
+        const { AutoPublishService } = await import("../evolution/auto-publish.js");
+        const { EvolutionService } = await import("../evolution/service.js");
+        const autoPublish = new AutoPublishService(new EvolutionService());
+        await autoPublish.onTaskCompleted({
+          id: task.id,
+          taskCode: task.taskCode,
+          title: task.title,
+          category: task.category,
+          assignedNodeId: task.assignedNodeId,
+          assignedRoleId: task.assignedRoleId,
+          deliverables: task.deliverables,
+          resultSummary: task.resultSummary,
+        });
+      } catch (err) {
+        logger.warn({ taskId: id, err }, "Auto-publish gene on task completion failed (non-fatal)");
+      }
+
       // Suggest capsule creation to the completing agent via SSE
       try {
         const targetNodeId = task.assignedNodeId ?? actor;

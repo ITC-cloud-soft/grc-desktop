@@ -720,6 +720,96 @@ export function useVoteCommunityPost() {
 }
 
 // ---------------------------------------------------------------------------
+// Community Feed (public API) — used by NotificationCenter & CommunityFeedPreview
+// ---------------------------------------------------------------------------
+
+export interface FeedPost {
+  id: string;
+  channelId: string;
+  authorId: string;
+  title: string;
+  postType: string;
+  score: number;
+  upvotes: number;
+  downvotes: number;
+  replyCount: number;
+  isPinned: number;
+  isLocked: number;
+  isDistilled: number;
+  contextData: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UnreadCountResponse {
+  unreadCount: number;
+  since: string;
+}
+
+const COMMUNITY_LAST_READ_KEY = 'grc_community_last_read';
+
+function getCommunityLastRead(): string {
+  const stored = localStorage.getItem(COMMUNITY_LAST_READ_KEY);
+  if (stored) return stored;
+  // Default: posts in the last 24 hours
+  return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function setCommunityLastRead(ts?: string): void {
+  localStorage.setItem(COMMUNITY_LAST_READ_KEY, ts ?? new Date().toISOString());
+}
+
+/** Fetch the public community feed (hot/new/top/relevant). */
+export function useCommunityFeed(params?: {
+  sort?: 'hot' | 'new' | 'top' | 'relevant';
+  limit?: number;
+  page?: number;
+}) {
+  return useQuery<PaginatedResponse<FeedPost>>({
+    queryKey: ['community', 'feed', params],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<FeedPost>>('/api/v1/community/feed', {
+        sort: params?.sort ?? 'new',
+        limit: params?.limit ?? 5,
+        page: params?.page ?? 1,
+      }),
+    staleTime: 60_000, // 1 minute
+  });
+}
+
+/**
+ * Fetch unread post count from the server, using the localStorage timestamp as
+ * the `since` boundary.  The server simply counts topics newer than that date.
+ */
+export function useCommunityUnreadCount() {
+  const since = getCommunityLastRead();
+  return useQuery<UnreadCountResponse>({
+    queryKey: ['community', 'unread-count', since],
+    queryFn: () =>
+      apiClient.get<UnreadCountResponse>('/api/v1/community/unread-count', { since }),
+    staleTime: 30_000, // 30 seconds
+    retry: false,
+  });
+}
+
+/** Mark all community notifications as read by updating localStorage. */
+export function useMarkCommunityRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const now = new Date().toISOString();
+      setCommunityLastRead(now);
+      return { markedAt: now };
+    },
+    onSuccess: () => {
+      // Invalidate with a wildcard to clear all since-keyed variants
+      qc.invalidateQueries({ queryKey: ['community', 'unread-count'] });
+      qc.invalidateQueries({ queryKey: ['community', 'feed'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Platform
 // ---------------------------------------------------------------------------
 
@@ -1667,8 +1757,9 @@ export function useAssignKeysToNode() {
       auxiliary_key_id: auxiliaryKeyId,
     }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
       qc.invalidateQueries({ queryKey: ['node-keys'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'model-keys'] });
     },
   });
 }
@@ -1679,8 +1770,9 @@ export function useUnassignKeysFromNode() {
     mutationFn: (nodeId: string) =>
       apiClient.post(`/api/v1/admin/nodes/${nodeId}/unassign-keys`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'employees'] });
       qc.invalidateQueries({ queryKey: ['node-keys'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'model-keys'] });
     },
   });
 }

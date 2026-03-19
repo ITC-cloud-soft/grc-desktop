@@ -8,7 +8,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import path from "node:path";
 import fs from "node:fs";
 import pino from "pino";
@@ -27,6 +27,8 @@ import {
 import { users } from "../auth/schema.js";
 import { AuthService } from "../auth/service.js";
 import { RolesService } from "../roles/service.js";
+import { EvolutionService } from "./service.js";
+import { nodeConfigSSE } from "./node-config-sse.js";
 
 const logger = pino({ name: "admin:evolution" });
 
@@ -1133,6 +1135,77 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           activeNodes: activeNodesResult[0]?.count ?? 0,
           promotionRate: Math.round(promotionRate * 100) / 100,
         },
+      });
+    }),
+  );
+
+  // ── GET /weekly-mvp — Weekly MVP rankings ──
+
+  router.get(
+    "/weekly-mvp",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const weekParam = req.query.week as string | undefined;
+
+      // Validate format if provided
+      if (weekParam && !/^\d{4}-W\d{2}$/.test(weekParam)) {
+        return res.status(400).json({
+          error: "Invalid week format. Expected ISO week like '2026-W12'.",
+        });
+      }
+
+      const evolutionService = new EvolutionService();
+      const result = await evolutionService.getWeeklyMVP(weekParam);
+
+      res.json(result);
+    }),
+  );
+
+  // ── GET /sse/status — SSE connection status overview ──
+
+  router.get(
+    "/sse/status",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const stats = nodeConfigSSE.getStats();
+      const connectedIds = nodeConfigSSE.getConnectedNodeIds();
+      const db = getDb();
+
+      let nodes: {
+        nodeId: string;
+        employeeName: string | null;
+        roleId: string | null;
+        lastHeartbeat: Date | null;
+      }[] = [];
+      if (connectedIds.length > 0) {
+        nodes = await db
+          .select({
+            nodeId: nodesTable.nodeId,
+            employeeName: nodesTable.employeeName,
+            roleId: nodesTable.roleId,
+            lastHeartbeat: nodesTable.lastHeartbeat,
+          })
+          .from(nodesTable)
+          .where(inArray(nodesTable.nodeId, connectedIds));
+      }
+
+      // Get total node count
+      const [{ count: totalNodes }] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(nodesTable);
+
+      res.json({
+        ok: true,
+        connected_nodes: stats.totalNodes,
+        total_connections: stats.totalConnections,
+        total_nodes: totalNodes,
+        nodes: nodes.map((n) => ({
+          node_id: n.nodeId,
+          employee_name: n.employeeName,
+          role_id: n.roleId,
+          connected: true,
+          last_heartbeat: n.lastHeartbeat,
+        })),
       });
     }),
   );

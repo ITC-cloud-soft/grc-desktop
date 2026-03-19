@@ -92,6 +92,7 @@ async function main() {
     "a2a-gateway": "GRC_MODULE_A2A_GATEWAY",
     meetings: "GRC_MODULE_MEETINGS",
     "model-keys": "GRC_MODULE_MODEL_KEYS",
+    messaging: "GRC_MODULE_MESSAGING",
   };
 
   app.patch("/api/v1/admin/modules", (req, res) => {
@@ -137,6 +138,14 @@ async function main() {
       return res.status(500).json({ error: "internal", message: "Failed to save configuration" });
     }
   });
+
+  // ── Swagger / OpenAPI Documentation ──────────────
+  try {
+    const { registerDocsRoute } = await import("./routes/docs.js");
+    await registerDocsRoute(app);
+  } catch (err) {
+    logger.warn({ err }, "Failed to register Swagger docs route");
+  }
 
   // ── Load Modules Dynamically ──────────────────────
   const loaded = await loadModules(app, config);

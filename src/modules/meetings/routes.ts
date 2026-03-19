@@ -16,6 +16,7 @@ import { rateLimitMiddleware } from "../../shared/middleware/rate-limit.js";
 import { uuidSchema } from "../../shared/utils/validators.js";
 import { MeetingService } from "./service.js";
 import { sseManager } from "./sse-manager.js";
+import { ScheduledMeetingManager } from "./scheduled-meetings.js";
 
 const logger = pino({ name: "module:meetings" });
 
@@ -373,6 +374,10 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
   // ── Mount router under /a2a/meetings prefix ───
   app.use("/a2a/meetings", router);
+
+  // ── Start Scheduled Meeting Manager ───────────
+  const scheduledManager = new ScheduledMeetingManager(() => service);
+  scheduledManager.start();
 
   logger.info("Meetings module registered — 8 A2A endpoints active");
 }

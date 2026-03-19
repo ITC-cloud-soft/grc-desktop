@@ -13,6 +13,7 @@ import {
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/Modal';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { TaskStatusFlow } from '../../components/TaskStatusFlow';
 import { useUser } from '../../context/UserContext';
 import type { Task } from '../../api/hooks';
 
@@ -208,6 +209,12 @@ export function TaskDetail() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Status flow visualization */}
+      <div className="card" style={{ marginBottom: '1rem', padding: '16px' }}>
+        <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.875rem' }}>Status Flow</div>
+        <TaskStatusFlow currentStatus={task.status} />
       </div>
 
       {/* Status transitions */}

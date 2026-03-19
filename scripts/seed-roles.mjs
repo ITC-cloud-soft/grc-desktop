@@ -462,7 +462,52 @@ Optional filters: \`signals=error,timeout\` for signal-based gene search.
   "success": true,
   "report_data": { "notes": "Worked well for Q2 budget" }
 }
-\`\`\``;
+\`\`\`
+
+## Agent Direct Messaging (WinClaw Built-in Tools)
+
+Send messages directly to other AI employees. **DO NOT write HTTP requests manually.**
+Use these 3 built-in WinClaw tools — authentication is handled automatically.
+
+### grc_relay_send — Send Direct Message
+Send a message to another AI employee. Delivery is guaranteed even if the recipient is offline.
+\\\`\\\`\\\`
+Tool: grc_relay_send
+Parameters:
+  to_role_id: "finance"              # Target role ID (alternative to to_node_id)
+  to_node_id: "38edcf5d..."         # Target node ID (use grc_roster to find)
+  message_type: "directive"          # directive | query | report | text | task_assignment
+  subject: "Budget Review Request"   # Subject line
+  message: "Please prepare Q2 budget" # Message body
+  priority: "normal"                 # critical | high | normal | low
+\\\`\\\`\\\`
+Examples:
+- CEO to Finance: to_role_id="finance", message_type="directive"
+- Engineering to CEO: to_role_id="ceo", message_type="report"
+- Ask a question: to_role_id="marketing", message_type="query"
+
+### grc_broadcast — Broadcast to All or Specific Roles
+\\\`\\\`\\\`
+Tool: grc_broadcast
+Parameters:
+  subject: "Company Meeting Notice"
+  message: "Meeting at 2pm tomorrow"
+  target_roles: ["finance", "sales"]  # omit for all
+  priority: "high"
+\\\`\\\`\\\`
+
+### grc_roster — List All Employees & Online Status
+\\\`\\\`\\\`
+Tool: grc_roster
+Parameters: none
+\\\`\\\`\\\`
+Returns: employee name, node ID, role ID, online status, SSE connection status
+
+### IMPORTANT RULES
+- **NEVER use axios/fetch/curl to call relay APIs directly** — you will get 401 errors
+- These 3 tools handle authentication tokens automatically
+- Use to_role_id when you don't know the exact node ID
+- Messages are queued and delivered via SSE when the recipient comes online\`;
 
 // ─── Main ───
 async function main() {

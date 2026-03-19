@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { eq, or, sql, desc, and, gte } from "drizzle-orm";
+import { eq, or, sql, desc, and, gte, lte } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
 import {
@@ -76,6 +76,7 @@ export async function upsertNode(params: {
   employeeId?: string;
   employeeName?: string;
   employeeEmail?: string;
+  workspacePath?: string;
 }): Promise<Record<string, unknown>> {
   const db = getDb();
   const now = new Date();
@@ -123,6 +124,9 @@ export async function upsertNode(params: {
         ...(params.employeeEmail !== undefined && {
           employeeEmail: params.employeeEmail,
         }),
+        ...(params.workspacePath !== undefined && {
+          workspacePath: params.workspacePath,
+        }),
       })
       .where(eq(nodesTable.nodeId, params.nodeId));
 
@@ -152,6 +156,7 @@ export async function upsertNode(params: {
       employeeId: params.employeeId ?? null,
       employeeName: params.employeeName ?? null,
       employeeEmail: params.employeeEmail ?? null,
+      workspacePath: params.workspacePath ?? null,
     });
   } catch (err: unknown) {
     // Handle duplicate key — another concurrent request beat us
@@ -191,6 +196,9 @@ export async function upsertNode(params: {
           }),
           ...(params.employeeEmail !== undefined && {
             employeeEmail: params.employeeEmail,
+          }),
+          ...(params.workspacePath !== undefined && {
+            workspacePath: params.workspacePath,
           }),
         })
         .where(eq(nodesTable.nodeId, params.nodeId));
@@ -965,4 +973,226 @@ export class EvolutionService implements IEvolutionService {
       activeNodes: Number(activeNodesResult?.count ?? 0),
     };
   }
+
+  /**
+   * Get weekly MVP rankings.
+   *
+   * Ranks nodes by contribution within an ISO week:
+   *  - Task completions (from tasks table)
+   *  - Community posts (from community_topics table)
+   *  - Gene/capsule publications
+   *
+   * @param weekStr ISO week string like "2026-W12". Defaults to current week.
+   * @returns Top 10 ranked nodes with scores.
+   */
+  async getWeeklyMVP(weekStr?: string): Promise<{
+    week: string;
+    startDate: string;
+    endDate: string;
+    rankings: Array<{
+      nodeId: string;
+      employeeName: string | null;
+      roleId: string | null;
+      tasksCompleted: number;
+      communityPosts: number;
+      genesPublished: number;
+      score: number;
+    }>;
+  }> {
+    const db = getDb();
+
+    // Parse ISO week to start/end dates
+    const { week, startDate, endDate } = parseISOWeek(weekStr);
+
+    // Import task and community schemas lazily to avoid circular deps
+    const { tasksTable } = await import("../tasks/schema.js");
+    const { communityTopicsTable } = await import("../community/schema.js");
+
+    // 1. Task completions per node
+    const taskCompletions = await db
+      .select({
+        nodeId: tasksTable.assignedNodeId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(tasksTable)
+      .where(
+        and(
+          eq(tasksTable.status, "completed"),
+          gte(tasksTable.updatedAt, startDate),
+          lte(tasksTable.updatedAt, endDate),
+        ),
+      )
+      .groupBy(tasksTable.assignedNodeId);
+
+    // 2. Community posts per author (authorId maps to node userId, but
+    //    we join through nodes to get nodeId)
+    const communityPosts = await db
+      .select({
+        nodeId: nodesTable.nodeId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(communityTopicsTable)
+      .innerJoin(nodesTable, eq(communityTopicsTable.authorId, nodesTable.userId))
+      .where(
+        and(
+          gte(communityTopicsTable.createdAt, startDate),
+          lte(communityTopicsTable.createdAt, endDate),
+        ),
+      )
+      .groupBy(nodesTable.nodeId);
+
+    // 3. Genes published per node
+    const genesPublished = await db
+      .select({
+        nodeId: genesTable.nodeId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(genesTable)
+      .where(
+        and(
+          gte(genesTable.createdAt, startDate),
+          lte(genesTable.createdAt, endDate),
+        ),
+      )
+      .groupBy(genesTable.nodeId);
+
+    // Merge into a single ranking map
+    const rankMap = new Map<
+      string,
+      { tasksCompleted: number; communityPosts: number; genesPublished: number }
+    >();
+
+    for (const row of taskCompletions) {
+      if (!row.nodeId) continue;
+      const entry = rankMap.get(row.nodeId) ?? {
+        tasksCompleted: 0,
+        communityPosts: 0,
+        genesPublished: 0,
+      };
+      entry.tasksCompleted = Number(row.count);
+      rankMap.set(row.nodeId, entry);
+    }
+
+    for (const row of communityPosts) {
+      if (!row.nodeId) continue;
+      const entry = rankMap.get(row.nodeId) ?? {
+        tasksCompleted: 0,
+        communityPosts: 0,
+        genesPublished: 0,
+      };
+      entry.communityPosts = Number(row.count);
+      rankMap.set(row.nodeId, entry);
+    }
+
+    for (const row of genesPublished) {
+      if (!row.nodeId) continue;
+      const entry = rankMap.get(row.nodeId) ?? {
+        tasksCompleted: 0,
+        communityPosts: 0,
+        genesPublished: 0,
+      };
+      entry.genesPublished = Number(row.count);
+      rankMap.set(row.nodeId, entry);
+    }
+
+    // Score: tasks * 15 + community posts * 5 + genes * 10
+    const scored = Array.from(rankMap.entries()).map(([nodeId, data]) => ({
+      nodeId,
+      ...data,
+      score: data.tasksCompleted * 15 + data.communityPosts * 5 + data.genesPublished * 10,
+    }));
+
+    // Sort by score descending, take top 10
+    scored.sort((a, b) => b.score - a.score);
+    const top10 = scored.slice(0, 10);
+
+    // Enrich with node metadata
+    const nodeIds = top10.map((r) => r.nodeId);
+    const nodeMetadata = new Map<string, { employeeName: string | null; roleId: string | null }>();
+
+    if (nodeIds.length > 0) {
+      const nodeRows = await db
+        .select({
+          nodeId: nodesTable.nodeId,
+          employeeName: nodesTable.employeeName,
+          roleId: nodesTable.roleId,
+        })
+        .from(nodesTable)
+        .where(sql`${nodesTable.nodeId} IN (${sql.join(nodeIds.map((id) => sql`${id}`), sql`, `)})`);
+
+      for (const row of nodeRows) {
+        nodeMetadata.set(row.nodeId, {
+          employeeName: row.employeeName,
+          roleId: row.roleId,
+        });
+      }
+    }
+
+    return {
+      week,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      rankings: top10.map((r) => ({
+        nodeId: r.nodeId,
+        employeeName: nodeMetadata.get(r.nodeId)?.employeeName ?? null,
+        roleId: nodeMetadata.get(r.nodeId)?.roleId ?? null,
+        tasksCompleted: r.tasksCompleted,
+        communityPosts: r.communityPosts,
+        genesPublished: r.genesPublished,
+        score: r.score,
+      })),
+    };
+  }
+}
+
+// ── Helper: Parse ISO week string to Date range ──
+
+function parseISOWeek(weekStr?: string): {
+  week: string;
+  startDate: Date;
+  endDate: Date;
+} {
+  const now = new Date();
+
+  if (weekStr && /^\d{4}-W\d{2}$/.test(weekStr)) {
+    const [yearStr, weekNumStr] = weekStr.split("-W");
+    const year = parseInt(yearStr, 10);
+    const weekNum = parseInt(weekNumStr, 10);
+
+    // ISO week 1 contains the first Thursday of the year.
+    // January 4 is always in ISO week 1.
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const dayOfWeek = jan4.getUTCDay() || 7; // Monday=1..Sunday=7
+    const startOfWeek1 = new Date(jan4);
+    startOfWeek1.setUTCDate(jan4.getUTCDate() - dayOfWeek + 1); // Monday of week 1
+
+    const startDate = new Date(startOfWeek1);
+    startDate.setUTCDate(startOfWeek1.getUTCDate() + (weekNum - 1) * 7);
+
+    const endDate = new Date(startDate);
+    endDate.setUTCDate(startDate.getUTCDate() + 7);
+
+    return { week: weekStr, startDate, endDate };
+  }
+
+  // Default: current ISO week
+  const dayOfWeek = now.getUTCDay() || 7;
+  const startDate = new Date(now);
+  startDate.setUTCDate(now.getUTCDate() - dayOfWeek + 1);
+  startDate.setUTCHours(0, 0, 0, 0);
+
+  const endDate = new Date(startDate);
+  endDate.setUTCDate(startDate.getUTCDate() + 7);
+
+  // Calculate the ISO week number for the response
+  const jan4 = new Date(Date.UTC(startDate.getUTCFullYear(), 0, 4));
+  const startOfYear = new Date(jan4);
+  const dow = jan4.getUTCDay() || 7;
+  startOfYear.setUTCDate(jan4.getUTCDate() - dow + 1);
+  const weekNum = Math.ceil(
+    ((startDate.getTime() - startOfYear.getTime()) / 86400000 + 1) / 7,
+  );
+  const week = `${startDate.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+
+  return { week, startDate, endDate };
 }

@@ -24,10 +24,11 @@ import {
   a2aSearchSchema,
   nodeIdSchema,
 } from "../../shared/utils/validators.js";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../../shared/db/connection.js";
 import { EvolutionService, upsertNode } from "./service.js";
 import { nodesTable } from "./schema.js";
+import { a2aRelayQueueTable } from "../relay/schema.js";
 import { nodeConfigSSE } from "./node-config-sse.js";
 import { RolesService } from "../roles/service.js";
 import { AuthService } from "../auth/service.js";
@@ -97,6 +98,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         employeeId: body.employee_id,
         employeeName: body.employee_name,
         employeeEmail: body.employee_email,
+        workspacePath: body.workspace_path,
       });
 
       // Auto-link node to a user record
@@ -105,12 +107,18 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         displayName: body.employee_name,
         email: body.employee_email,
       });
+
+      // Build update set: always link userId, optionally set roleId from employee_role
+      const nodeUpdateSet: Record<string, unknown> = { userId: nodeUser.id };
+      if (body.employee_role) {
+        nodeUpdateSet.roleId = body.employee_role;
+      }
       await getDb()
         .update(nodesTable)
-        .set({ userId: nodeUser.id })
+        .set(nodeUpdateSet)
         .where(eq(nodesTable.nodeId, body.node_id));
 
-      logger.debug({ nodeId: body.node_id }, "Hello received");
+      logger.debug({ nodeId: body.node_id, role: body.employee_role }, "Hello received");
 
       // Propagate company context if this node has a role assigned
       const helloNode = await getDb()
@@ -154,6 +162,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         employeeId: body.employee_id,
         employeeName: body.employee_name,
         employeeEmail: body.employee_email,
+        workspacePath: body.workspace_path,
       });
 
       // Auto-link node to a user record
@@ -162,9 +171,14 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         displayName: body.employee_name,
         email: body.employee_email,
       });
+
+      const heartbeatUpdateSet: Record<string, unknown> = { userId: nodeUser.id };
+      if (body.employee_role) {
+        heartbeatUpdateSet.roleId = body.employee_role;
+      }
       await getDb()
         .update(nodesTable)
-        .set({ userId: nodeUser.id })
+        .set(heartbeatUpdateSet)
         .where(eq(nodesTable.nodeId, body.node_id));
 
       // Check if there's a pending config update — push it inline
@@ -185,11 +199,44 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         // Node may not exist yet in config context; ignore
       }
 
+      // Count pending relay messages for this node
+      let pendingMessages = { total: 0, critical: 0 };
+      try {
+        const db = getDb();
+        const pendingRows = await db
+          .select({
+            priority: a2aRelayQueueTable.priority,
+            count: sql<number>`COUNT(*)`,
+          })
+          .from(a2aRelayQueueTable)
+          .where(
+            and(
+              eq(a2aRelayQueueTable.toNodeId, body.node_id),
+              eq(a2aRelayQueueTable.status, "queued"),
+            ),
+          )
+          .groupBy(a2aRelayQueueTable.priority);
+
+        let total = 0;
+        let critical = 0;
+        for (const row of pendingRows) {
+          const count = Number(row.count);
+          total += count;
+          if (row.priority === "critical") {
+            critical = count;
+          }
+        }
+        pendingMessages = { total, critical };
+      } catch {
+        // Non-critical — don't fail the heartbeat
+      }
+
       res.json({
         ok: true,
         node_id: body.node_id,
         heartbeat: true,
         node,
+        pending_messages: pendingMessages,
         ...(pendingConfig ? { config_update: pendingConfig } : {}),
       });
     }),

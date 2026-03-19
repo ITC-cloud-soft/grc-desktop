@@ -9,7 +9,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, sql, and, inArray, gte } from "drizzle-orm";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
@@ -19,6 +19,13 @@ import { getDb } from "../../shared/db/connection.js";
 import { uuidSchema, paginationSchema } from "../../shared/utils/validators.js";
 import { tasksTable, taskCommentsTable, taskProgressLogTable } from "./schema.js";
 import { TasksService } from "./service.js";
+import { a2aRelayQueueTable } from "../relay/schema.js";
+import { communityTopicsTable } from "../community/schema.js";
+import { calculateMeetingKPIs } from "../meetings/meeting-kpi.js";
+import { CampaignService } from "../community/campaign-service.js";
+import { PipelineService } from "../community/pipeline-service.js";
+import { RoadmapService } from "../community/roadmap-service.js";
+import { KpiService } from "../community/kpi-service.js";
 
 const logger = pino({ name: "admin:tasks" });
 
@@ -87,6 +94,75 @@ const commentSchema = z.object({
 
 const rejectExpenseSchema = z.object({
   reason: z.string().optional(),
+});
+
+// ── Campaign Zod Schemas ────────────────────────
+
+const campaignListQuerySchema = paginationSchema.extend({
+  status: z.string().optional(),
+  start_from: z.string().optional(),
+  start_to: z.string().optional(),
+});
+
+const createCampaignSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().nullable().optional(),
+  start_date: z.string().datetime(),
+  end_date: z.string().datetime().nullable().optional(),
+  status: z.enum(["draft", "planned", "active", "completed", "cancelled"]).optional(),
+  owner_id: z.string().max(100).nullable().optional(),
+  owner_role: z.string().max(50).nullable().optional(),
+  channel: z.string().max(50).nullable().optional(),
+  budget: z.string().max(30).nullable().optional(),
+  kpi_target: z.string().max(200).nullable().optional(),
+});
+
+const updateCampaignSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().nullable().optional(),
+  start_date: z.string().datetime().optional(),
+  end_date: z.string().datetime().nullable().optional(),
+  status: z.enum(["draft", "planned", "active", "completed", "cancelled"]).optional(),
+  owner_id: z.string().max(100).nullable().optional(),
+  owner_role: z.string().max(50).nullable().optional(),
+  channel: z.string().max(50).nullable().optional(),
+  budget: z.string().max(30).nullable().optional(),
+  kpi_target: z.string().max(200).nullable().optional(),
+});
+
+// ── Pipeline Zod Schemas ────────────────────────
+
+const pipelineListQuerySchema = paginationSchema.extend({
+  stage: z.string().optional(),
+  owner_id: z.string().optional(),
+});
+
+const createDealSchema = z.object({
+  company_name: z.string().min(1).max(200),
+  contact_name: z.string().max(100).nullable().optional(),
+  deal_title: z.string().min(1).max(200),
+  stage: z.enum(["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]).optional(),
+  deal_value: z.string().max(30).nullable().optional(),
+  currency: z.string().max(3).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  expected_close_date: z.string().datetime().nullable().optional(),
+  owner_id: z.string().max(100).nullable().optional(),
+  owner_role: z.string().max(50).nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const updateDealSchema = z.object({
+  company_name: z.string().min(1).max(200).optional(),
+  contact_name: z.string().max(100).nullable().optional(),
+  deal_title: z.string().min(1).max(200).optional(),
+  stage: z.enum(["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]).optional(),
+  deal_value: z.string().max(30).nullable().optional(),
+  currency: z.string().max(3).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  expected_close_date: z.string().datetime().nullable().optional(),
+  owner_id: z.string().max(100).nullable().optional(),
+  owner_role: z.string().max(50).nullable().optional(),
+  notes: z.string().nullable().optional(),
 });
 
 // ── Route Registration ──────────────────────────
@@ -347,6 +423,52 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     }),
   );
 
+  // ── GET /notifications/summary — Unified notification counts across modules ──
+
+  router.get(
+    "/notifications/summary",
+    requireAuth, requireAdmin,
+    asyncHandler(async (_req: Request, res: Response) => {
+      const db = getDb();
+
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+      const [relayResult, tasksResult, communityResult] = await Promise.all([
+        // Count queued relay messages
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(a2aRelayQueueTable)
+          .where(eq(a2aRelayQueueTable.status, "queued")),
+
+        // Count pending/in_progress tasks
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(tasksTable)
+          .where(
+            inArray(tasksTable.status, ["pending", "in_progress"]),
+          ),
+
+        // Count community topics created in the last 24 hours
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(communityTopicsTable)
+          .where(gte(communityTopicsTable.createdAt, twentyFourHoursAgo)),
+      ]);
+
+      const relayPending = Number(relayResult[0]?.count ?? 0);
+      const tasksPending = Number(tasksResult[0]?.count ?? 0);
+      const communityUnread = Number(communityResult[0]?.count ?? 0);
+
+      res.json({
+        relay_pending: relayPending,
+        tasks_pending: tasksPending,
+        community_unread: communityUnread,
+        total: relayPending + tasksPending + communityUnread,
+      });
+    }),
+  );
+
   // ── POST /tasks/resend-pending — Re-send SSE task_assigned for all pending tasks ──
   router.post(
     "/tasks/resend-pending",
@@ -355,6 +477,487 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       const service = new TasksService();
       const results = await service.resendPendingTaskEvents();
       res.json({ ok: true, ...results });
+    }),
+  );
+
+  // ── GET /meetings/kpi — Meeting KPI rankings ──
+
+  router.get(
+    "/meetings/kpi",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const range = (req.query.range as string) || "week";
+
+      const now = new Date();
+      let startDate: Date;
+
+      if (range === "month") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else {
+        // Default: current week (Monday start)
+        const day = now.getDay();
+        const diff = day === 0 ? 6 : day - 1; // Monday = 0
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - diff);
+        startDate.setHours(0, 0, 0, 0);
+      }
+
+      const kpis = await calculateMeetingKPIs(startDate, now);
+
+      res.json({
+        range,
+        startDate: startDate.toISOString(),
+        endDate: now.toISOString(),
+        data: kpis,
+      });
+    }),
+  );
+
+  // ═══════════════════════════════════════════════
+  // Campaign Calendar Endpoints
+  // ═══════════════════════════════════════════════
+
+  const campaignService = new CampaignService();
+
+  // ── GET /campaigns — List campaigns (paginated, date-filterable) ──
+
+  router.get(
+    "/campaigns",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const query = campaignListQuerySchema.parse(req.query);
+
+      const result = await campaignService.list({
+        page: query.page,
+        limit: query.limit,
+        status: query.status,
+        startFrom: query.start_from,
+        startTo: query.start_to,
+      });
+
+      res.json(result);
+    }),
+  );
+
+  // ── POST /campaigns — Create campaign ──
+
+  router.post(
+    "/campaigns",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = createCampaignSchema.parse(req.body);
+
+      const campaign = await campaignService.create({
+        title: body.title,
+        description: body.description ?? undefined,
+        startDate: new Date(body.start_date),
+        endDate: body.end_date ? new Date(body.end_date) : undefined,
+        status: body.status,
+        ownerId: body.owner_id ?? undefined,
+        ownerRole: body.owner_role ?? undefined,
+        channel: body.channel ?? undefined,
+        budget: body.budget ?? undefined,
+        kpiTarget: body.kpi_target ?? undefined,
+      });
+
+      res.status(201).json({ data: campaign });
+    }),
+  );
+
+  // ── PUT /campaigns/:id — Update campaign ──
+
+  router.put(
+    "/campaigns/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const body = updateCampaignSchema.parse(req.body);
+
+      const campaign = await campaignService.update(id, {
+        title: body.title,
+        description: body.description ?? undefined,
+        startDate: body.start_date ? new Date(body.start_date) : undefined,
+        endDate: body.end_date !== undefined
+          ? (body.end_date !== null ? new Date(body.end_date) : null)
+          : undefined,
+        status: body.status,
+        ownerId: body.owner_id ?? undefined,
+        ownerRole: body.owner_role ?? undefined,
+        channel: body.channel ?? undefined,
+        budget: body.budget ?? undefined,
+        kpiTarget: body.kpi_target ?? undefined,
+      });
+
+      res.json({ data: campaign });
+    }),
+  );
+
+  // ── DELETE /campaigns/:id — Delete campaign ──
+
+  router.delete(
+    "/campaigns/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      await campaignService.delete(id);
+
+      logger.info({ campaignId: id, admin: req.auth?.sub }, "Campaign deleted by admin");
+      res.json({ ok: true, deleted: id });
+    }),
+  );
+
+  // ═══════════════════════════════════════════════
+  // Sales Pipeline Endpoints
+  // ═══════════════════════════════════════════════
+
+  const pipelineService = new PipelineService();
+
+  // ── GET /pipeline/summary — Stage counts + weighted value ──
+  // NOTE: Must be registered BEFORE /pipeline/:id to avoid route collision
+
+  router.get(
+    "/pipeline/summary",
+    requireAuth, requireAdmin,
+    asyncHandler(async (_req: Request, res: Response) => {
+      const summary = await pipelineService.getSummary();
+      res.json({ data: summary });
+    }),
+  );
+
+  // ── GET /pipeline — List deals (paginated, stage-filterable) ──
+
+  router.get(
+    "/pipeline",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const query = pipelineListQuerySchema.parse(req.query);
+
+      const result = await pipelineService.list({
+        page: query.page,
+        limit: query.limit,
+        stage: query.stage,
+        ownerId: query.owner_id,
+      });
+
+      res.json(result);
+    }),
+  );
+
+  // ── POST /pipeline — Create deal ──
+
+  router.post(
+    "/pipeline",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = createDealSchema.parse(req.body);
+
+      const deal = await pipelineService.create({
+        companyName: body.company_name,
+        contactName: body.contact_name ?? undefined,
+        dealTitle: body.deal_title,
+        stage: body.stage,
+        dealValue: body.deal_value ?? undefined,
+        currency: body.currency,
+        probability: body.probability,
+        expectedCloseDate: body.expected_close_date ? new Date(body.expected_close_date) : undefined,
+        ownerId: body.owner_id ?? undefined,
+        ownerRole: body.owner_role ?? undefined,
+        notes: body.notes ?? undefined,
+      });
+
+      res.status(201).json({ data: deal });
+    }),
+  );
+
+  // ── PUT /pipeline/:id — Update deal ──
+
+  router.put(
+    "/pipeline/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const body = updateDealSchema.parse(req.body);
+
+      const deal = await pipelineService.update(id, {
+        companyName: body.company_name,
+        contactName: body.contact_name ?? undefined,
+        dealTitle: body.deal_title,
+        stage: body.stage,
+        dealValue: body.deal_value ?? undefined,
+        currency: body.currency,
+        probability: body.probability,
+        expectedCloseDate: body.expected_close_date !== undefined
+          ? (body.expected_close_date !== null ? new Date(body.expected_close_date) : null)
+          : undefined,
+        ownerId: body.owner_id ?? undefined,
+        ownerRole: body.owner_role ?? undefined,
+        notes: body.notes ?? undefined,
+      });
+
+      res.json({ data: deal });
+    }),
+  );
+
+  // ── DELETE /pipeline/:id — Delete deal ──
+
+  router.delete(
+    "/pipeline/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      await pipelineService.delete(id);
+
+      logger.info({ dealId: id, admin: req.auth?.sub }, "Pipeline deal deleted by admin");
+      res.json({ ok: true, deleted: id });
+    }),
+  );
+
+  // ────────────────────────────────────────────────
+  //  Roadmap (Impl-4)
+  // ────────────────────────────────────────────────
+
+  const roadmapService = new RoadmapService();
+
+  const roadmapListQuerySchema = paginationSchema.extend({
+    phase: z.enum(["now", "next", "later", "done"]).optional(),
+    priority: z.enum(["must", "should", "could", "wont"]).optional(),
+    category: z.string().optional(),
+  });
+
+  const createRoadmapSchema = z.object({
+    title: z.string().min(1).max(200),
+    description: z.string().nullable().optional(),
+    phase: z.enum(["now", "next", "later", "done"]).optional(),
+    priority: z.enum(["must", "should", "could", "wont"]).optional(),
+    category: z.string().max(50).nullable().optional(),
+    start_date: z.string().datetime().nullable().optional(),
+    end_date: z.string().datetime().nullable().optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+    owner_id: z.string().max(100).nullable().optional(),
+    owner_role: z.string().max(50).nullable().optional(),
+    linked_task_ids: z.string().nullable().optional(),
+  });
+
+  const updateRoadmapSchema = z.object({
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().nullable().optional(),
+    phase: z.enum(["now", "next", "later", "done"]).optional(),
+    priority: z.enum(["must", "should", "could", "wont"]).optional(),
+    category: z.string().max(50).nullable().optional(),
+    start_date: z.string().datetime().nullable().optional(),
+    end_date: z.string().datetime().nullable().optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+    owner_id: z.string().max(100).nullable().optional(),
+    owner_role: z.string().max(50).nullable().optional(),
+    linked_task_ids: z.string().nullable().optional(),
+  });
+
+  // GET /roadmap — List roadmap items
+  router.get(
+    "/roadmap",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const query = roadmapListQuerySchema.parse(req.query);
+      const result = await roadmapService.list({
+        page: query.page,
+        limit: query.limit,
+        phase: query.phase,
+        priority: query.priority,
+        category: query.category,
+      });
+      res.json(result);
+    }),
+  );
+
+  // POST /roadmap — Create roadmap item
+  router.post(
+    "/roadmap",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = createRoadmapSchema.parse(req.body);
+      const item = await roadmapService.create({
+        title: body.title,
+        description: body.description ?? undefined,
+        phase: body.phase,
+        priority: body.priority,
+        category: body.category ?? undefined,
+        startDate: body.start_date ? new Date(body.start_date) : undefined,
+        endDate: body.end_date ? new Date(body.end_date) : undefined,
+        progress: body.progress,
+        ownerId: body.owner_id ?? undefined,
+        ownerRole: body.owner_role ?? undefined,
+        linkedTaskIds: body.linked_task_ids ?? undefined,
+      });
+      res.status(201).json({ data: item });
+    }),
+  );
+
+  // PUT /roadmap/:id — Update roadmap item
+  router.put(
+    "/roadmap/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const body = updateRoadmapSchema.parse(req.body);
+      const item = await roadmapService.update(id, {
+        title: body.title,
+        description: body.description,
+        phase: body.phase,
+        priority: body.priority,
+        category: body.category,
+        startDate: body.start_date !== undefined
+          ? (body.start_date !== null ? new Date(body.start_date) : null)
+          : undefined,
+        endDate: body.end_date !== undefined
+          ? (body.end_date !== null ? new Date(body.end_date) : null)
+          : undefined,
+        progress: body.progress,
+        ownerId: body.owner_id,
+        ownerRole: body.owner_role,
+        linkedTaskIds: body.linked_task_ids,
+      });
+      res.json({ data: item });
+    }),
+  );
+
+  // DELETE /roadmap/:id — Delete roadmap item
+  router.delete(
+    "/roadmap/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const result = await roadmapService.delete(id);
+      res.json(result);
+    }),
+  );
+
+  // ────────────────────────────────────────────────
+  //  KPIs (Impl-4)
+  // ────────────────────────────────────────────────
+
+  const kpiService = new KpiService();
+
+  const createKpiSchema = z.object({
+    name: z.string().min(1).max(100),
+    description: z.string().nullable().optional(),
+    category: z.string().max(50).nullable().optional(),
+    unit: z.string().max(20).nullable().optional(),
+    target_value: z.string().max(30).nullable().optional(),
+    target_period: z.enum(["daily", "weekly", "monthly", "quarterly", "yearly"]).optional(),
+    owner_role: z.string().max(50).nullable().optional(),
+  });
+
+  const updateKpiSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    description: z.string().nullable().optional(),
+    category: z.string().max(50).nullable().optional(),
+    unit: z.string().max(20).nullable().optional(),
+    target_value: z.string().max(30).nullable().optional(),
+    target_period: z.enum(["daily", "weekly", "monthly", "quarterly", "yearly"]).optional(),
+    owner_role: z.string().max(50).nullable().optional(),
+  });
+
+  const recordKpiValueSchema = z.object({
+    value: z.string().min(1).max(30),
+    recorded_by: z.string().max(100).optional(),
+    notes: z.string().optional(),
+  });
+
+  const kpiHistoryQuerySchema = z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  });
+
+  // GET /kpis/dashboard — All KPIs + achievement rates (must be before /kpis/:id)
+  router.get(
+    "/kpis/dashboard",
+    requireAuth, requireAdmin,
+    asyncHandler(async (_req: Request, res: Response) => {
+      const dashboard = await kpiService.getDashboard();
+      res.json({ data: dashboard });
+    }),
+  );
+
+  // GET /kpis — List KPI definitions
+  router.get(
+    "/kpis",
+    requireAuth, requireAdmin,
+    asyncHandler(async (_req: Request, res: Response) => {
+      const definitions = await kpiService.listDefinitions();
+      res.json({ data: definitions });
+    }),
+  );
+
+  // POST /kpis — Create KPI definition
+  router.post(
+    "/kpis",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const body = createKpiSchema.parse(req.body);
+      const definition = await kpiService.createDefinition({
+        name: body.name,
+        description: body.description ?? undefined,
+        category: body.category ?? undefined,
+        unit: body.unit ?? undefined,
+        targetValue: body.target_value ?? undefined,
+        targetPeriod: body.target_period,
+        ownerRole: body.owner_role ?? undefined,
+      });
+      res.status(201).json({ data: definition });
+    }),
+  );
+
+  // PUT /kpis/:id — Update KPI definition
+  router.put(
+    "/kpis/:id",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const body = updateKpiSchema.parse(req.body);
+      const definition = await kpiService.updateDefinition(id, {
+        name: body.name,
+        description: body.description,
+        category: body.category,
+        unit: body.unit,
+        targetValue: body.target_value,
+        targetPeriod: body.target_period,
+        ownerRole: body.owner_role,
+      });
+      res.json({ data: definition });
+    }),
+  );
+
+  // POST /kpis/:id/record — Record a KPI value
+  router.post(
+    "/kpis/:id/record",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const body = recordKpiValueSchema.parse(req.body);
+      const admin = req.auth?.sub ?? "admin";
+      const record = await kpiService.recordValue(
+        id,
+        body.value,
+        body.recorded_by ?? admin,
+        body.notes,
+      );
+      res.status(201).json({ data: record });
+    }),
+  );
+
+  // GET /kpis/:id/history — KPI history with optional date range
+  router.get(
+    "/kpis/:id/history",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const id = uuidSchema.parse(req.params.id);
+      const query = kpiHistoryQuerySchema.parse(req.query);
+      const result = await kpiService.getHistory(
+        id,
+        query.from ? new Date(query.from) : undefined,
+        query.to ? new Date(query.to) : undefined,
+      );
+      res.json({ data: result });
     }),
   );
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { forceLogout } from '../api/client';
 import { useUser } from '../context/UserContext';
+import { NotificationCenter } from './NotificationCenter';
 
 interface NavItem {
   /** i18n key for sidebar.items.{labelKey} */
@@ -93,6 +94,18 @@ const NAV_SECTIONS: NavSection[] = [
       { labelKey: 'skillStats', path: '/skills/stats' },
     ],
   },
+  // ── マーケティング・営業 ──
+  {
+    sectionKey: 'marketing',
+    icon: '\u{1F4CA}',
+    adminOnly: true,
+    items: [
+      { labelKey: 'campaigns', path: '/campaigns', adminOnly: true },
+      { labelKey: 'pipelineBoard', path: '/pipeline', adminOnly: true },
+      { labelKey: 'roadmap', path: '/roadmap', adminOnly: true },
+      { labelKey: 'kpi', path: '/kpi', adminOnly: true },
+    ],
+  },
   // ── 进化 ──
   {
     sectionKey: 'evolution',
@@ -139,6 +152,7 @@ function isSectionActive(section: NavSection, pathname: string): boolean {
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const { isAdmin } = useUser();
   const { t } = useTranslation('sidebar');
@@ -218,6 +232,49 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
+        {/* Quick Meeting button */}
+        <div style={{ padding: '6px 12px', marginBottom: '4px' }}>
+          <button
+            onClick={() => navigate('/meetings/create')}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '7px 12px',
+              background: 'var(--color-primary, #3b82f6)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-md, 6px)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.opacity = '0.85')}
+            onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            <span>&#9889;</span>
+            <span>クイック会議</span>
+          </button>
+        </div>
+
+        {/* Notification Center — community bell */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 12px',
+          borderBottom: '1px solid var(--color-sidebar-border)',
+          marginBottom: '4px',
+        }}>
+          <span style={{ fontSize: '12px', color: 'var(--color-sidebar-text)', fontWeight: 500 }}>
+            Community
+          </span>
+          <NotificationCenter />
+        </div>
+
         {/* Settings link */}
         <NavLink
           to="/settings"

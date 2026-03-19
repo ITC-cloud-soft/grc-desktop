@@ -8,6 +8,7 @@
 
 import {
   mysqlTable,
+  mysqlEnum,
   char,
   varchar,
   int,
@@ -15,7 +16,9 @@ import {
   tinyint,
   json,
   timestamp,
+  datetime,
   text,
+  decimal,
   uniqueIndex,
   index,
 } from "drizzle-orm/mysql-core";
@@ -176,3 +179,99 @@ export const agentMessagesTable = mysqlTable(
 
 export type AgentMessage = typeof agentMessagesTable.$inferSelect;
 export type NewAgentMessage = typeof agentMessagesTable.$inferInsert;
+
+// ── Campaigns ─────────────────────────────────
+
+export const campaignsTable = mysqlTable("campaigns", {
+  id: char("id", { length: 36 }).primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  startDate: datetime("start_date").notNull(),
+  endDate: datetime("end_date"),
+  status: mysqlEnum("campaign_status", ["draft", "planned", "active", "completed", "cancelled"]).default("draft"),
+  ownerId: varchar("owner_id", { length: 100 }),
+  ownerRole: varchar("owner_role", { length: 50 }),
+  channel: varchar("channel", { length: 50 }),
+  budget: decimal("budget", { precision: 12, scale: 2 }),
+  kpiTarget: varchar("kpi_target", { length: 200 }),
+  createdAt: datetime("created_at").default(sql`NOW()`),
+  updatedAt: datetime("updated_at").default(sql`NOW()`),
+});
+
+export type Campaign = typeof campaignsTable.$inferSelect;
+export type NewCampaign = typeof campaignsTable.$inferInsert;
+
+// ── Sales Pipeline ────────────────────────────
+
+export const salesPipelineTable = mysqlTable("sales_pipeline", {
+  id: char("id", { length: 36 }).primaryKey(),
+  companyName: varchar("company_name", { length: 200 }).notNull(),
+  contactName: varchar("contact_name", { length: 100 }),
+  dealTitle: varchar("deal_title", { length: 200 }).notNull(),
+  stage: mysqlEnum("pipeline_stage", ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]).default("lead"),
+  dealValue: decimal("deal_value", { precision: 14, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("JPY"),
+  probability: int("probability").default(0),
+  expectedCloseDate: datetime("expected_close_date"),
+  ownerId: varchar("owner_id", { length: 100 }),
+  ownerRole: varchar("owner_role", { length: 50 }),
+  notes: text("notes"),
+  createdAt: datetime("created_at").default(sql`NOW()`),
+  updatedAt: datetime("updated_at").default(sql`NOW()`),
+});
+
+export type SalesPipelineDeal = typeof salesPipelineTable.$inferSelect;
+export type NewSalesPipelineDeal = typeof salesPipelineTable.$inferInsert;
+
+// ── Roadmap Items ─────────────────────────────────
+
+export const roadmapItemsTable = mysqlTable("roadmap_items", {
+  id: char("id", { length: 36 }).primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  phase: mysqlEnum("roadmap_phase", ["now", "next", "later", "done"]).default("later"),
+  priority: mysqlEnum("roadmap_priority", ["must", "should", "could", "wont"]).default("should"),
+  category: varchar("category", { length: 50 }),
+  startDate: datetime("start_date"),
+  endDate: datetime("end_date"),
+  progress: int("progress").default(0),
+  ownerId: varchar("owner_id", { length: 100 }),
+  ownerRole: varchar("owner_role", { length: 50 }),
+  linkedTaskIds: text("linked_task_ids"),
+  createdAt: datetime("created_at").default(sql`NOW()`),
+  updatedAt: datetime("updated_at").default(sql`NOW()`),
+});
+
+export type RoadmapItem = typeof roadmapItemsTable.$inferSelect;
+export type NewRoadmapItem = typeof roadmapItemsTable.$inferInsert;
+
+// ── KPI Definitions ───────────────────────────────
+
+export const kpiDefinitionsTable = mysqlTable("kpi_definitions", {
+  id: char("id", { length: 36 }).primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }),
+  unit: varchar("unit", { length: 20 }),
+  targetValue: decimal("target_value", { precision: 14, scale: 2 }),
+  targetPeriod: mysqlEnum("kpi_period", ["daily", "weekly", "monthly", "quarterly", "yearly"]).default("monthly"),
+  ownerRole: varchar("owner_role", { length: 50 }),
+  createdAt: datetime("created_at").default(sql`NOW()`),
+});
+
+export type KpiDefinition = typeof kpiDefinitionsTable.$inferSelect;
+export type NewKpiDefinition = typeof kpiDefinitionsTable.$inferInsert;
+
+// ── KPI Records ───────────────────────────────────
+
+export const kpiRecordsTable = mysqlTable("kpi_records", {
+  id: char("id", { length: 36 }).primaryKey(),
+  kpiId: char("kpi_id", { length: 36 }).notNull(),
+  value: decimal("value", { precision: 14, scale: 2 }).notNull(),
+  recordedAt: datetime("recorded_at").default(sql`NOW()`),
+  recordedBy: varchar("recorded_by", { length: 100 }),
+  notes: text("notes"),
+});
+
+export type KpiRecord = typeof kpiRecordsTable.$inferSelect;
+export type NewKpiRecord = typeof kpiRecordsTable.$inferInsert;

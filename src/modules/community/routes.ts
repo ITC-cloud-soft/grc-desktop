@@ -15,6 +15,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
+import { gte, sql } from "drizzle-orm";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
@@ -25,6 +26,8 @@ import {
 } from "../../shared/middleware/error-handler.js";
 import { paginationSchema, uuidSchema, nodeIdSchema } from "../../shared/utils/validators.js";
 import { getCommunityService } from "./service.js";
+import { getDb } from "../../shared/db/connection.js";
+import { communityTopicsTable } from "./schema.js";
 import type { PostType } from "../../shared/interfaces/community.interface.js";
 
 const logger = pino({ name: "module:community" });
@@ -377,6 +380,45 @@ export async function register(app: Express, config: GrcConfig) {
       const service = getCommunityService();
       const stats = await service.getStats();
       res.json({ data: stats });
+    }),
+  );
+
+  // ────────────────────────────────────────────────
+  //  Unread Count & Mark Read (Notification Center)
+  // ────────────────────────────────────────────────
+
+  /**
+   * GET /unread-count
+   *
+   * Returns the count of posts created after the `since` query param
+   * (an ISO-8601 timestamp supplied by the client).  The client stores its
+   * own last-checked timestamp in localStorage and passes it here so the
+   * server never needs to persist per-user read state.
+   *
+   * Falls back to posts in the last 24 h when `since` is omitted.
+   * Authentication optional — anonymous users also get a count.
+   */
+  router.get(
+    "/unread-count",
+    optionalAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const db = getDb();
+
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const sinceStr = typeof req.query.since === "string" ? req.query.since : null;
+      const sinceDate = sinceStr ? new Date(sinceStr) : oneDayAgo;
+      // Guard against malformed timestamps
+      const since = isNaN(sinceDate.getTime()) ? oneDayAgo : sinceDate;
+
+      const [countRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(communityTopicsTable)
+        .where(gte(communityTopicsTable.createdAt, since));
+
+      res.json({
+        unreadCount: Number(countRow?.count ?? 0),
+        since: since.toISOString(),
+      });
     }),
   );
 

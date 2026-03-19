@@ -83,5 +83,13 @@
   "cancel": "キャンセル",
   "saveRole": "ロールを保存",
   "saving": "保存中…",
-  "roleIdHint": "英小文字、数字、ハイフン、アンダースコア使用可。作成後は変更不可。"
+  "roleIdHint": "英小文字、数字、ハイフン、アンダースコア使用可。作成後は変更不可。",
+  "skillCatalog": {
+    "title": "スキルカタログ",
+    "subtitle": "ティア別に整理された WinClaw スキルを閲覧",
+    "searchPlaceholder": "名前またはプラグインで検索…",
+    "skillCount": "スキル",
+    "loading": "スキルを読み込み中…",
+    "empty": "現在のフィルターに一致するスキルがありません。"
+  }
 }

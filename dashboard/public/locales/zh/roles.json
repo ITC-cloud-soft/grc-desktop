@@ -83,5 +83,13 @@
   "cancel": "取消",
   "saveRole": "保存角色",
   "saving": "保存中…",
-  "roleIdHint": "仅限小写字母、数字、连字符和下划线。创建后不可修改。"
+  "roleIdHint": "仅限小写字母、数字、连字符和下划线。创建后不可修改。",
+  "skillCatalog": {
+    "title": "技能目录",
+    "subtitle": "按层级浏览可用的 WinClaw 技能",
+    "searchPlaceholder": "按名称或插件搜索…",
+    "skillCount": "个技能",
+    "loading": "正在加载技能…",
+    "empty": "没有符合当前筛选条件的技能。"
+  }
 }

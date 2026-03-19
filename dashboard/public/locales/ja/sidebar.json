@@ -55,7 +55,8 @@
     "campaigns": "キャンペーンカレンダー",
     "pipelineBoard": "パイプラインボード",
     "roadmap": "ロードマップ",
-    "kpi": "KPIダッシュボード"
+    "kpi": "KPIダッシュボード",
+    "skillCatalog": "スキルカタログ"
   },
   "footer": {
     "settings": "設定",

@@ -83,5 +83,13 @@
   "cancel": "Cancel",
   "saveRole": "Save Role",
   "saving": "Saving…",
-  "roleIdHint": "Lowercase letters, numbers, hyphens, and underscores only. Cannot be changed after creation."
+  "roleIdHint": "Lowercase letters, numbers, hyphens, and underscores only. Cannot be changed after creation.",
+  "skillCatalog": {
+    "title": "Skill Catalog",
+    "subtitle": "Browse available WinClaw skills organized by tier",
+    "searchPlaceholder": "Search by name or plugin…",
+    "skillCount": "skills",
+    "loading": "Loading skills…",
+    "empty": "No skills match the current filters."
+  }
 }

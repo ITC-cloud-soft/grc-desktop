@@ -73,6 +73,7 @@ const NAV_SECTIONS: NavSection[] = [
       { labelKey: 'roleTemplates', path: '/roles' },
       { labelKey: 'createRole', path: '/roles/create' },
       { labelKey: 'aiWizard', path: '/roles/create-wizard', adminOnly: true },
+      { labelKey: 'skillCatalog', path: '/roles/skills', adminOnly: true },
     ],
   },
   // ── 员工 ──

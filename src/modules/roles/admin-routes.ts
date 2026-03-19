@@ -8,7 +8,7 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, or, like, inArray, asc } from "drizzle-orm";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
 import { createAuthMiddleware } from "../../shared/middleware/auth.js";
@@ -16,7 +16,7 @@ import { createAdminAuthMiddleware } from "../../shared/middleware/admin-auth.js
 import { asyncHandler, NotFoundError } from "../../shared/middleware/error-handler.js";
 import { getDb } from "../../shared/db/connection.js";
 import { paginationSchema } from "../../shared/utils/validators.js";
-import { nodesTable } from "./schema.js";
+import { nodesTable, skillCatalogTable } from "./schema.js";
 import { RolesService } from "./service.js";
 import { chatCompletionJson } from "../../shared/llm/client.js";
 import { buildRoleGenerationPrompt } from "../../shared/llm/prompts.js";
@@ -379,6 +379,67 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
       );
 
       res.json({ data: { nodeId, fileName, updated: true } });
+    }),
+  );
+
+  // ── GET /roles/skills — Skill catalog (filterable) ──
+
+  const skillListQuerySchema = z.object({
+    tier: z.string().optional(),   // comma-separated, e.g. "P0,P1"
+    search: z.string().optional(), // text search in name/description
+  });
+
+  router.get(
+    "/roles/skills",
+    requireAuth, requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+      const query = skillListQuerySchema.parse(req.query);
+      const db = getDb();
+
+      const conditions: ReturnType<typeof eq>[] = [];
+
+      // Tier filter
+      if (query.tier) {
+        const tiers = query.tier.split(",").map((t) => t.trim()) as ("P0" | "P1" | "P2" | "P3")[];
+        if (tiers.length === 1) {
+          conditions.push(eq(skillCatalogTable.tier, tiers[0]));
+        } else if (tiers.length > 1) {
+          conditions.push(inArray(skillCatalogTable.tier, tiers));
+        }
+      }
+
+      // Text search
+      if (query.search) {
+        const pattern = `%${query.search}%`;
+        conditions.push(
+          or(
+            like(skillCatalogTable.name, pattern),
+            like(skillCatalogTable.description, pattern),
+          )!,
+        );
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Custom sort: P0 first, then P1, P2, P3; within each tier by roleCount desc
+      const rows = await db
+        .select()
+        .from(skillCatalogTable)
+        .where(whereClause)
+        .orderBy(
+          sql`FIELD(${skillCatalogTable.tier}, 'P0', 'P1', 'P2', 'P3')`,
+          desc(skillCatalogTable.roleCount),
+        );
+
+      // Parse JSON string columns for the response
+      const data = rows.map((row) => ({
+        ...row,
+        capabilities: row.capabilities ? JSON.parse(row.capabilities) : [],
+        slashCommands: row.slashCommands ? JSON.parse(row.slashCommands) : [],
+        departments: row.departments ? JSON.parse(row.departments) : [],
+      }));
+
+      res.json({ data, total: data.length });
     }),
   );
 

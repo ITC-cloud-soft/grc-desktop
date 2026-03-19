@@ -11,6 +11,7 @@ import {
   mysqlTable,
   varchar,
   tinyint,
+  int,
   mediumtext,
   text,
   timestamp,
@@ -53,3 +54,18 @@ export const roleTemplatesTable = mysqlTable(
     index("idx_is_builtin").on(table.isBuiltin),
   ],
 );
+
+// ── Skill Catalog ───────────────────────────────
+
+export const skillCatalogTable = mysqlTable("skill_catalog", {
+  id: varchar("id", { length: 50 }).primaryKey(), // e.g. "S01", "S02"
+  name: varchar("name", { length: 200 }).notNull(),
+  pluginName: varchar("plugin_name", { length: 100 }).notNull(), // e.g. "skill-data-analysis"
+  tier: mysqlEnum("tier", ["P0", "P1", "P2", "P3"]).notNull(),
+  description: text("description"),
+  capabilities: text("capabilities"), // JSON array of capability strings
+  slashCommands: text("slash_commands"), // JSON array of command strings
+  departments: text("departments"), // JSON array of department names
+  roleCount: int("role_count").default(0), // How many roles use this skill
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

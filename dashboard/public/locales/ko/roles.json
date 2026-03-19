@@ -83,5 +83,13 @@
   "cancel": "취소",
   "saveRole": "역할 저장",
   "saving": "저장 중…",
-  "roleIdHint": "소문자, 숫자, 하이픈 및 밑줄만 사용 가능. 생성 후 변경 불가."
+  "roleIdHint": "소문자, 숫자, 하이픈 및 밑줄만 사용 가능. 생성 후 변경 불가.",
+  "skillCatalog": {
+    "title": "스킬 카탈로그",
+    "subtitle": "티어별로 정리된 WinClaw 스킬 탐색",
+    "searchPlaceholder": "이름 또는 플러그인으로 검색…",
+    "skillCount": "개의 스킬",
+    "loading": "스킬을 불러오는 중…",
+    "empty": "현재 필터와 일치하는 스킬이 없습니다."
+  }
 }

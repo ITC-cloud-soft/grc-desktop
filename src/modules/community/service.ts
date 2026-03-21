@@ -786,10 +786,11 @@ export class CommunityService implements ICommunityService {
         .where(eq(communitySubscriptionsTable.id, existing[0]!.id));
 
       // Decrement subscriber count (floor at 0)
+      // Dialect-aware: MAX(x, 0) works in both MySQL and SQLite (replaces MySQL-only GREATEST)
       await tx
         .update(communityChannelsTable)
         .set({
-          subscriberCount: sql`GREATEST(${communityChannelsTable.subscriberCount} - 1, 0)`,
+          subscriberCount: sql`MAX(${communityChannelsTable.subscriberCount} - 1, 0)`,
         })
         .where(eq(communityChannelsTable.id, channelId));
 

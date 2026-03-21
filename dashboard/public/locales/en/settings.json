@@ -7,6 +7,18 @@
     "current": "Current language: {{language}}",
     "browserDetected": "Detected from browser: {{language}}"
   },
+  "llm": {
+    "title": "LLM API Settings",
+    "description": "Configure the LLM API for AI-powered features such as role wizard and strategy generation.",
+    "provider": "Provider",
+    "baseUrl": "Base URL (optional)",
+    "apiKey": "API Key",
+    "model": "Model",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Settings saved successfully",
+    "saveFailed": "Failed to save settings"
+  },
   "modules": {
     "title": "Feature Modules",
     "description": "Enable or disable functional modules. Changes take effect after server restart.",

@@ -12,6 +12,7 @@ import helmet from "helmet";
 import pino from "pino";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "./config.js";
 import { initDatabase, closeDatabase } from "./shared/db/connection.js";
@@ -22,6 +23,27 @@ import { errorHandler } from "./shared/middleware/error-handler.js";
 const logger = pino({ name: "grc-server" });
 
 async function main() {
+  // ── Ensure .env exists (desktop mode) ────────────
+  const __rootDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
+  const envFilePath = path.join(__rootDir, ".env");
+  if (!fs.existsSync(envFilePath)) {
+    fs.writeFileSync(envFilePath, [
+      "# GRC Desktop Configuration",
+      "# Created automatically on first launch",
+      "",
+      "# LLM API for AI generation features (role wizard, strategy generation)",
+      "GRC_LLM_PROVIDER=",
+      "GRC_LLM_BASE_URL=",
+      "GRC_LLM_API_KEY=",
+      "GRC_LLM_MODEL=",
+      "",
+    ].join("\n"), "utf-8");
+    logger.info({ path: envFilePath }, ".env file created for desktop mode");
+  }
+
   // ── Load Configuration ────────────────────────────
   const config = loadConfig();
   logger.info(
@@ -30,7 +52,12 @@ async function main() {
   );
 
   // ── Initialize Database ───────────────────────────
-  await initDatabase(config.database.url);
+  // In desktop/SQLite mode, call without args to trigger auto-detection
+  if (config.database.url) {
+    await initDatabase(config.database.url);
+  } else {
+    await initDatabase();
+  }
 
   // ── Create Express App ────────────────────────────
   const app = express();
@@ -139,6 +166,68 @@ async function main() {
     }
   });
 
+  // ── LLM Settings API ────────────────────────────
+  const LLM_ENV_KEYS = ["GRC_LLM_PROVIDER", "GRC_LLM_BASE_URL", "GRC_LLM_API_KEY", "GRC_LLM_MODEL"] as const;
+
+  app.get("/api/v1/admin/llm-settings", (_req, res) => {
+    res.json({
+      provider: process.env.GRC_LLM_PROVIDER || "",
+      baseUrl: process.env.GRC_LLM_BASE_URL || "",
+      apiKey: process.env.GRC_LLM_API_KEY ? "••••" + process.env.GRC_LLM_API_KEY.slice(-4) : "",
+      model: process.env.GRC_LLM_MODEL || "",
+      hasApiKey: !!process.env.GRC_LLM_API_KEY,
+    });
+  });
+
+  app.patch("/api/v1/admin/llm-settings", (req, res) => {
+    const body = req.body as Record<string, string>;
+    if (!body || typeof body !== "object") {
+      return res.status(400).json({ error: "bad_request" });
+    }
+
+    const envPath = path.resolve(
+      path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")),
+      "..",
+      ".env",
+    );
+
+    try {
+      let envContent = "";
+      try { envContent = fs.readFileSync(envPath, "utf-8"); } catch { /* new file */ }
+
+      const mapping: Record<string, string> = {
+        provider: "GRC_LLM_PROVIDER",
+        baseUrl: "GRC_LLM_BASE_URL",
+        apiKey: "GRC_LLM_API_KEY",
+        model: "GRC_LLM_MODEL",
+      };
+
+      for (const [field, envKey] of Object.entries(mapping)) {
+        if (field in body) {
+          const val = body[field] ?? "";
+          // Skip masked apiKey (don't overwrite with mask)
+          if (field === "apiKey" && val.startsWith("••••")) continue;
+
+          const regex = new RegExp(`^${envKey}=.*$`, "m");
+          if (regex.test(envContent)) {
+            envContent = envContent.replace(regex, `${envKey}=${val}`);
+          } else {
+            envContent = envContent.trimEnd() + `\n${envKey}=${val}\n`;
+          }
+          // Also update process.env for immediate effect
+          process.env[envKey] = val;
+        }
+      }
+
+      fs.writeFileSync(envPath, envContent, "utf-8");
+      logger.info("LLM settings saved to .env");
+      return res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, "Failed to save LLM settings");
+      return res.status(500).json({ error: "internal" });
+    }
+  });
+
   // ── Swagger / OpenAPI Documentation ──────────────
   try {
     const { registerDocsRoute } = await import("./routes/docs.js");
@@ -150,6 +239,26 @@ async function main() {
   // ── Load Modules Dynamically ──────────────────────
   const loaded = await loadModules(app, config);
   logger.info({ modules: loaded }, "Modules loaded");
+
+  // ── Serve Dashboard Static Files (desktop mode) ────
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const dashboardDir = path.join(__dirname, "dashboard-dist");
+
+  if (fs.existsSync(dashboardDir)) {
+    app.use(express.static(dashboardDir));
+
+    // SPA fallback: all non-API routes return index.html
+    // Express 5 requires named wildcard params (path-to-regexp v8)
+    const apiPrefixes = ["/api", "/auth", "/a2a", "/health"];
+    app.get("/{*splat}", (req, res, next) => {
+      if (apiPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+        return next();
+      }
+      res.sendFile(path.join(dashboardDir, "index.html"));
+    });
+
+    logger.info({ dashboardDir }, "Dashboard static files enabled (desktop mode)");
+  }
 
   // ── 404 Handler (before error handler) ─────────────
   app.use((_req, res) => {

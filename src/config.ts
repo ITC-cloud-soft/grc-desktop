@@ -174,20 +174,24 @@ function envInt(key: string, defaultValue: number): number {
 export function loadConfig(): GrcConfig {
   const nodeEnv = envString("NODE_ENV", "development");
 
+  // Desktop mode detection: SQLite dialect means we're running as a desktop app
+  const dbDialect = envString("GRC_DB_DIALECT", "");
+  const isDesktopMode = dbDialect === "sqlite" || (!process.env.DATABASE_URL && !dbDialect);
+
   // RS256 key pair for JWT signing/verification
   // Replace literal \n with actual newlines for PEM format
   let jwtPrivateKey = (process.env.JWT_PRIVATE_KEY?.trim() || "").replace(/\\n/g, "\n");
   let jwtPublicKey = (process.env.JWT_PUBLIC_KEY?.trim() || "").replace(/\\n/g, "\n");
 
-  // Fail fast: reject missing keys in production
-  if (nodeEnv === "production" && (!jwtPrivateKey || !jwtPublicKey)) {
+  // Fail fast: reject missing keys in production (but NOT in desktop mode)
+  if (nodeEnv === "production" && !isDesktopMode && (!jwtPrivateKey || !jwtPublicKey)) {
     throw new Error(
       "FATAL: JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be set in production. " +
       "Generate an RSA key pair and provide them as PEM-encoded environment variables.",
     );
   }
 
-  // In development, load persisted keys or generate a new pair (saved to disk)
+  // In development or desktop mode, load persisted keys or generate a new pair
   if (!jwtPrivateKey || !jwtPublicKey) {
     const devKeys = loadOrGenerateDevKeyPair();
     jwtPrivateKey = devKeys.privateKey;
@@ -202,12 +206,13 @@ export function loadConfig(): GrcConfig {
     database: {
       url: (() => {
         const url = envString("DATABASE_URL", "");
-        if (nodeEnv === "production" && !url) {
+        // Skip DATABASE_URL check in desktop/SQLite mode
+        if (nodeEnv === "production" && !isDesktopMode && !url) {
           throw new Error(
-            "FATAL: DATABASE_URL must be set in production.",
+            "FATAL: DATABASE_URL must be set in production (unless using SQLite desktop mode).",
           );
         }
-        return url || "mysql://root:Admin123@13.78.81.86:18306/grc-server";
+        return url || (isDesktopMode ? "" : "mysql://root:Admin123@13.78.81.86:18306/grc-server");
       })(),
     },
 
@@ -268,7 +273,7 @@ export function loadConfig(): GrcConfig {
       evolution: envBool("GRC_MODULE_EVOLUTION", true),
       update: envBool("GRC_MODULE_UPDATE", true),
       telemetry: envBool("GRC_MODULE_TELEMETRY", true),
-      community: envBool("GRC_MODULE_COMMUNITY", false),
+      community: envBool("GRC_MODULE_COMMUNITY", true),
       platform: envBool("GRC_MODULE_PLATFORM", true),
       roles: envBool("GRC_MODULE_ROLES", true),
       tasks: envBool("GRC_MODULE_TASKS", true),

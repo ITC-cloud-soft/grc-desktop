@@ -7,6 +7,18 @@
     "current": "현재 언어: {{language}}",
     "browserDetected": "브라우저에서 감지: {{language}}"
   },
+  "llm": {
+    "title": "LLM API 설정",
+    "description": "역할 마법사, 전략 생성 등 AI 기능에 사용할 LLM API를 설정합니다.",
+    "provider": "제공자",
+    "baseUrl": "Base URL (선택사항)",
+    "apiKey": "API 키",
+    "model": "모델",
+    "save": "저장",
+    "saving": "저장 중...",
+    "saved": "설정이 저장되었습니다",
+    "saveFailed": "저장에 실패했습니다"
+  },
   "modules": {
     "title": "기능 모듈",
     "description": "기능 모듈을 활성화하거나 비활성화합니다. 변경사항은 서버 재시작 후 적용됩니다.",

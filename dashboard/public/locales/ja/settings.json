@@ -7,6 +7,18 @@
     "current": "現在の言語：{{language}}",
     "browserDetected": "ブラウザから検出：{{language}}"
   },
+  "llm": {
+    "title": "LLM API 設定",
+    "description": "ロールウィザードや戦略生成などの AI 機能に使用する LLM API を設定します。",
+    "provider": "プロバイダー",
+    "baseUrl": "ベース URL（任意）",
+    "apiKey": "API キー",
+    "model": "モデル",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "設定を保存しました",
+    "saveFailed": "設定の保存に失敗しました"
+  },
   "modules": {
     "title": "機能モジュール",
     "description": "機能モジュールの有効/無効を切り替えます。変更はサーバー再起動後に反映されます。",

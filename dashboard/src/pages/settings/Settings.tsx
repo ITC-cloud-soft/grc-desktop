@@ -1,7 +1,15 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS, LANGUAGE_FLAGS } from '../../i18n';
 import type { SupportedLanguage } from '../../i18n';
+
+interface LlmSettings {
+  provider: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  hasApiKey: boolean;
+}
 
 /** Module keys grouped by category */
 const CORE_MODULES = ['auth', 'strategy', 'roles', 'platform', 'model-keys', 'relay', 'a2a-gateway'] as const;
@@ -16,6 +24,13 @@ export function Settings() {
   const [loadingModules, setLoadingModules] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // LLM settings
+  const [llm, setLlm] = useState<LlmSettings>({ provider: '', baseUrl: '', apiKey: '', model: '', hasApiKey: false });
+  const [llmDirty, setLlmDirty] = useState(false);
+  const [llmSaving, setLlmSaving] = useState(false);
+  const [llmMsg, setLlmMsg] = useState<string | null>(null);
+  const llmMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch current module status from backend
   useEffect(() => {
@@ -37,6 +52,39 @@ export function Settings() {
     };
     fetchModules();
   }, []);
+
+  // Fetch LLM settings on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('grc_admin_token');
+        const res = await fetch('/api/v1/admin/llm-settings', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) setLlm(await res.json());
+      } catch { /* non-critical */ }
+    })();
+  }, []);
+
+  const updateLlm = (field: keyof LlmSettings, value: string) => {
+    setLlm((prev) => ({ ...prev, [field]: value }));
+    setLlmDirty(true);
+  };
+
+  const saveLlmSettings = async () => {
+    setLlmSaving(true); setLlmMsg(null);
+    try {
+      const token = localStorage.getItem('grc_admin_token');
+      const res = await fetch('/api/v1/admin/llm-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ provider: llm.provider, baseUrl: llm.baseUrl, apiKey: llm.apiKey, model: llm.model }),
+      });
+      if (res.ok) { setLlmMsg(t('llm.saved')); setLlmDirty(false); }
+      else setLlmMsg(t('llm.saveFailed'));
+    } catch { setLlmMsg(t('llm.saveFailed')); }
+    finally { setLlmSaving(false); if (llmMsgTimer.current) clearTimeout(llmMsgTimer.current); llmMsgTimer.current = setTimeout(() => setLlmMsg(null), 5000); }
+  };
 
   const handleLanguageChange = async (lang: SupportedLanguage) => {
     await i18n.changeLanguage(lang);
@@ -159,6 +207,36 @@ export function Settings() {
               )}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* LLM Settings Section */}
+      <div className="settings-section">
+        <h2 className="settings-section-title">{t('llm.title')}</h2>
+        <p className="settings-section-desc">{t('llm.description')}</p>
+        <div style={{ display: 'grid', gap: 16, maxWidth: 560 }}>
+          <div>
+            <label className="label" htmlFor="llm-provider">{t('llm.provider')}</label>
+            <input id="llm-provider" className="input" value={llm.provider} onChange={(e) => updateLlm('provider', e.target.value)} placeholder="openai / anthropic / deepseek / google / qwen" />
+          </div>
+          <div>
+            <label className="label" htmlFor="llm-base-url">{t('llm.baseUrl')}</label>
+            <input id="llm-base-url" className="input" value={llm.baseUrl} onChange={(e) => updateLlm('baseUrl', e.target.value)} placeholder="https://api.openai.com/v1" />
+          </div>
+          <div>
+            <label className="label" htmlFor="llm-api-key">{t('llm.apiKey')}</label>
+            <input id="llm-api-key" className="input" type="password" value={llm.apiKey} onChange={(e) => updateLlm('apiKey', e.target.value)} placeholder={llm.hasApiKey ? '••••••••' : 'sk-...'} />
+          </div>
+          <div>
+            <label className="label" htmlFor="llm-model">{t('llm.model')}</label>
+            <input id="llm-model" className="input" value={llm.model} onChange={(e) => updateLlm('model', e.target.value)} placeholder="gpt-4o-mini" />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn btn-primary" onClick={saveLlmSettings} disabled={llmSaving || !llmDirty} style={{ height: 38, paddingInline: 24 }}>
+              {llmSaving ? t('llm.saving') : t('llm.save')}
+            </button>
+            {llmMsg && <span style={{ fontSize: 13, color: llmMsg === t('llm.saved') ? '#059669' : '#dc2626' }}>{llmMsg}</span>}
+          </div>
         </div>
       </div>
 

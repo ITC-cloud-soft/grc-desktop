@@ -15,7 +15,7 @@ import {
   type Profile as GoogleProfile,
   type VerifyCallback as GoogleVerifyCallback,
 } from "passport-google-oauth20";
-import { randomBytes, createHmac } from "node:crypto";
+import crypto, { randomBytes, createHmac } from "node:crypto";
 import { z } from "zod";
 import pino from "pino";
 import type { GrcConfig } from "../../config.js";
@@ -34,6 +34,9 @@ import {
 import { signToken, type JwtPayload } from "../../shared/utils/jwt.js";
 import { nodeIdSchema, uuidSchema } from "../../shared/utils/validators.js";
 import { AuthService } from "./service.js";
+import { getDb } from "../../shared/db/connection.js";
+import { users } from "./schema.js";
+import { eq } from "drizzle-orm";
 
 const logger = pino({ name: "module:auth" });
 
@@ -376,6 +379,87 @@ export async function register(app: Express, config: GrcConfig) {
 
     logger.warn("DEV /auth/dev/token route enabled (NODE_ENV=%s)", config.nodeEnv);
   }
+
+  // ── Desktop Init (auto-create admin on first launch) ─────
+  router.post(
+    "/desktop-init",
+    asyncHandler(async (_req: Request, res: Response) => {
+      // Only allow from localhost
+      const remoteIp = _req.ip || _req.socket.remoteAddress || "";
+      const isLocal = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteIp);
+      if (!isLocal) {
+        return res.status(403).json({ ok: false, message: "Desktop init only available from localhost" });
+      }
+
+      const db = getDb();
+
+      // Check if any users exist
+      const existingUsers = await db.select({ id: users.id }).from(users).limit(1);
+      if (existingUsers.length > 0) {
+        // Users exist — check if this is a returning admin
+        const admins = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+        if (admins.length > 0) {
+          const admin = admins[0]!;
+          const token = issueJwt(
+            { id: admin.id, tier: admin.tier, role: admin.role, email: admin.email ?? undefined },
+            config,
+          );
+          const refreshToken = await authService.issueRefreshToken(admin.id);
+          return res.json({
+            ok: true,
+            initialized: false,
+            token,
+            refreshToken,
+            user: {
+              id: admin.id,
+              displayName: admin.displayName,
+              email: admin.email,
+              role: admin.role,
+              tier: admin.tier,
+            },
+          });
+        }
+        return res.status(409).json({ ok: false, message: "Users exist but no admin found. Please login normally." });
+      }
+
+      // No users exist — create the default admin user
+      const adminId = crypto.randomUUID();
+      const now = new Date();
+      await db.insert(users).values({
+        id: adminId,
+        provider: "desktop",
+        providerId: "admin",
+        displayName: "Administrator",
+        email: "admin@localhost",
+        tier: "free",
+        role: "admin",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const token = issueJwt(
+        { id: adminId, tier: "free", role: "admin", email: "admin@localhost" },
+        config,
+      );
+      const refreshToken = await authService.issueRefreshToken(adminId);
+
+      logger.info({ userId: adminId }, "Desktop admin user auto-created on first launch");
+
+      res.status(201).json({
+        ok: true,
+        initialized: true,
+        token,
+        refreshToken,
+        user: {
+          id: adminId,
+          displayName: "Administrator",
+          email: "admin@localhost",
+          role: "admin",
+          tier: "free",
+        },
+      });
+    }),
+  );
 
   // ── Email Auth ──────────────────────────────────
 

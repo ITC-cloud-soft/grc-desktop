@@ -176,6 +176,7 @@ export class AuthService implements IAuthService {
 
     // Insert new user
     const id = uuidv4();
+    const now = new Date();
     await db.insert(users).values({
       id,
       provider: params.provider,
@@ -185,6 +186,8 @@ export class AuthService implements IAuthService {
       email: params.email ?? null,
       tier: "free",
       role: "user",
+      createdAt: now,
+      updatedAt: now,
     });
 
     logger.info(
@@ -230,6 +233,7 @@ export class AuthService implements IAuthService {
 
     // Insert new node-provider user
     const id = uuidv4();
+    const now = new Date();
     await db.insert(users).values({
       id,
       provider: "node",
@@ -238,6 +242,8 @@ export class AuthService implements IAuthService {
       email: params.email ?? null,
       tier: "free",
       role: "user",
+      createdAt: now,
+      updatedAt: now,
     });
 
     logger.info(
@@ -259,6 +265,7 @@ export class AuthService implements IAuthService {
     }
 
     const id = uuidv4();
+    const now = new Date();
     await db.insert(users).values({
       id,
       provider: "anonymous",
@@ -266,6 +273,8 @@ export class AuthService implements IAuthService {
       displayName: `node-${nodeId.slice(0, 8)}`,
       tier: "free",
       role: "user",
+      createdAt: now,
+      updatedAt: now,
     });
 
     logger.info({ userId: id, nodeId }, "Anonymous user registered");
@@ -775,6 +784,7 @@ export class AuthService implements IAuthService {
 
     // Create the user
     const id = uuidv4();
+    const now = new Date();
     await db.insert(users).values({
       id,
       provider: "email",
@@ -784,6 +794,8 @@ export class AuthService implements IAuthService {
       passwordHash,
       tier: "free",
       role: "user",
+      createdAt: now,
+      updatedAt: now,
     });
 
     logger.info({ userId: id, email: normalizedEmail }, "Email user registered");
@@ -885,6 +897,7 @@ export class AuthService implements IAuthService {
     if (!user) {
       // Create new email user (passwordless - no passwordHash)
       const id = uuidv4();
+      const now = new Date();
       await db.insert(users).values({
         id,
         provider: "email",
@@ -893,6 +906,8 @@ export class AuthService implements IAuthService {
         email: normalizedEmail,
         tier: "free",
         role: "user",
+        createdAt: now,
+        updatedAt: now,
       });
       user = (await this.getUserById(id))!;
       logger.info(

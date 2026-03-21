@@ -36,6 +36,7 @@ import {
   ConflictError,
   BadRequestError,
 } from "../../shared/middleware/error-handler.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
 import type { PaginatedResult } from "../../shared/utils/validators.js";
 
 const logger = pino({ name: "module:clawhub:service" });
@@ -224,10 +225,13 @@ export async function listSkills(
   if (params.tags) {
     const tagList = params.tags.split(",").map((t) => t.trim()).filter(Boolean);
     if (tagList.length > 0) {
-      // MySQL JSON_CONTAINS to filter tags array
+      // Dialect-aware: MySQL uses JSON_CONTAINS, SQLite uses json_each
+      const dialect = getCurrentDialect();
       for (const tag of tagList) {
         conditions.push(
-          sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(tag)}, '$')`,
+          dialect === "mysql"
+            ? sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(tag)}, '$')`
+            : sql`EXISTS (SELECT 1 FROM json_each(${skillsTable.tags}) WHERE value = ${tag})`,
         );
       }
     }

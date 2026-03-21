@@ -17,6 +17,7 @@ import { sql, eq, desc, and, inArray, gt } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
 import { skillsTable, skillDownloadsTable } from "./schema.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
 
 const logger = pino({ name: "clawhub:recommender" });
 
@@ -266,10 +267,12 @@ export class SkillRecommender {
       .slice(0, 5)
       .map(([tag]) => tag);
 
-    // NOTE: JSON_CONTAINS is MySQL-specific. If DB portability is needed,
-    // abstract this into a shared utility in src/shared/utils/db-helpers.ts
+    // Dialect-aware: MySQL uses JSON_CONTAINS, SQLite uses json_each
+    const dialect = getCurrentDialect();
     const tagConditions = topTags.map(
-      (tag) => sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(tag)}, '$')`,
+      (tag) => dialect === "mysql"
+        ? sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(tag)}, '$')`
+        : sql`EXISTS (SELECT 1 FROM json_each(${skillsTable.tags}) WHERE value = ${tag})`,
     );
 
     const candidates = await db
@@ -378,11 +381,13 @@ export class SkillRecommender {
     const conditions = [eq(skillsTable.status, "active")];
 
     // If a platform is provided, prefer skills tagged with it
-    // NOTE: JSON_CONTAINS is MySQL-specific. If DB portability is needed,
-    // abstract this into a shared utility in src/shared/utils/db-helpers.ts
+    // Dialect-aware: MySQL uses JSON_CONTAINS, SQLite uses json_each
     if (platform) {
+      const dialect = getCurrentDialect();
       conditions.push(
-        sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(platform)}, '$')`,
+        dialect === "mysql"
+          ? sql`JSON_CONTAINS(${skillsTable.tags}, ${JSON.stringify(platform)}, '$')`
+          : sql`EXISTS (SELECT 1 FROM json_each(${skillsTable.tags}) WHERE value = ${platform})`,
       );
     }
 

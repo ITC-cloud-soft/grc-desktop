@@ -31,6 +31,7 @@ import {
   ConflictError,
   ForbiddenError,
 } from "../../shared/middleware/error-handler.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
 
 const logger = pino({ name: "module:evolution:service" });
 
@@ -496,10 +497,13 @@ export class EvolutionService implements IEvolutionService {
         );
       }
 
-      // Signal-based matching: use JSON_CONTAINS in SQL for accurate DB-level filtering
+      // Dialect-aware: MySQL uses JSON_CONTAINS, SQLite uses json_each
       if (hasSignalFilter) {
+        const dialect = getCurrentDialect();
         const signalConditions = params.signals!.map((sig) =>
-          sql`JSON_CONTAINS(${genesTable.signalsMatch}, ${JSON.stringify(sig)})`,
+          dialect === "mysql"
+            ? sql`JSON_CONTAINS(${genesTable.signalsMatch}, ${JSON.stringify(sig)})`
+            : sql`EXISTS (SELECT 1 FROM json_each(${genesTable.signalsMatch}) WHERE value = ${sig})`,
         );
         if (signalConditions.length === 1) {
           geneConditions.push(signalConditions[0]!);
@@ -521,8 +525,12 @@ export class EvolutionService implements IEvolutionService {
       if (hasSignalFilter) {
         // When signals are provided, score genes by number of matching signals
         // and sort by score descending (best matches first)
+        // Dialect-aware: MySQL uses IFNULL+JSON_CONTAINS, SQLite uses COALESCE+json_each
+        const dialect = getCurrentDialect();
         const scoreParts = params.signals!.map((sig) =>
-          sql`IFNULL(JSON_CONTAINS(${genesTable.signalsMatch}, ${JSON.stringify(sig)}), 0)`,
+          dialect === "mysql"
+            ? sql`COALESCE(JSON_CONTAINS(${genesTable.signalsMatch}, ${JSON.stringify(sig)}), 0)`
+            : sql`COALESCE((SELECT 1 FROM json_each(${genesTable.signalsMatch}) WHERE value = ${sig} LIMIT 1), 0)`,
         );
         const scoreExpr = scoreParts.length === 1
           ? scoreParts[0]!

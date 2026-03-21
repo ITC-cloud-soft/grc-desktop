@@ -14,11 +14,16 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:desktop": "bash scripts/build-desktop.sh",
+    "build:desktop:win": "scripts\\build-desktop.bat",
+    "start:desktop": "node -e \"process.env.GRC_DB_DIALECT='sqlite'; require('child_process').execSync('node dist/index.js', {stdio:'inherit', env:{...process.env, GRC_DB_DIALECT:'sqlite'}})\"",
+    "start:desktop:simple": "node dist/index.js"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.39.0",
@@ -45,6 +50,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.0",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.0",
@@ -60,6 +66,8 @@
     "@typescript-eslint/parser": "^8.0.0",
     "drizzle-kit": "^0.30.0",
     "eslint": "^9.0.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

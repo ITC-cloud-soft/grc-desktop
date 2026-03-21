@@ -7,6 +7,18 @@
     "current": "当前语言：{{language}}",
     "browserDetected": "从浏览器检测：{{language}}"
   },
+  "llm": {
+    "title": "LLM API 设置",
+    "description": "配置用于角色向导、策略生成等 AI 功能的 LLM API。",
+    "provider": "提供商",
+    "baseUrl": "Base URL（可选）",
+    "apiKey": "API 密钥",
+    "model": "模型",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "设置已保存",
+    "saveFailed": "保存失败"
+  },
   "modules": {
     "title": "功能模块",
     "description": "启用或关闭功能模块。更改需要重启服务器后生效。",

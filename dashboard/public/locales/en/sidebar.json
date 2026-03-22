@@ -8,7 +8,7 @@
     "overview": "Overview"
   },
   "sections": {
-    "lobsterNodes": "Lobster Pool",
+    "lobsterNodes": "Claw Pool",
     "tasks": "Tasks",
     "meetings": "Meetings",
     "platform": "Organization",
@@ -28,7 +28,7 @@
     "skillList": "Skill List",
     "skillStats": "Skill Stats",
     "assets": "Assets",
-    "nodes": "Lobster Pool",
+    "nodes": "Claw Pool",
     "pipeline": "Pipeline",
     "leaderboard": "Leaderboard",
     "releases": "Releases",

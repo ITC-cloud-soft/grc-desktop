@@ -850,11 +850,26 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           execFileSync("docker", ["stop", node.containerId], { encoding: "utf-8" });
           execFileSync("docker", ["rm", node.containerId], { encoding: "utf-8" });
         } catch (err: any) {
-          logger.warn({ err: err.message, containerId: node.containerId }, "Failed to stop/remove old container");
+          logger.warn({ err: err.message, containerId: node.containerId }, "Failed to stop/remove old container by ID, trying by port");
+          // Fallback: find container by gateway port and stop it
+          if (node.gatewayPort) {
+            try {
+              const portContainers = execFileSync("docker", ["ps", "-q", "--filter", `publish=${node.gatewayPort}`], { encoding: "utf-8" }).trim();
+              if (portContainers) {
+                for (const cid of portContainers.split("\n").filter(Boolean)) {
+                  try {
+                    execFileSync("docker", ["stop", cid], { encoding: "utf-8" });
+                    execFileSync("docker", ["rm", cid], { encoding: "utf-8" });
+                    logger.info({ containerId: cid, port: node.gatewayPort }, "Stopped container found by port fallback");
+                  } catch { /* best effort */ }
+                }
+              }
+            } catch { /* non-fatal */ }
+          }
         }
 
         // Re-run with same config
-        const grcPort = process.env.PORT || "3200";
+        const grcPort = process.env.GRC_API_PORT || "3100";
         const dockerArgs = ["run", "-d", "--pull", "always", "-p", `${node.gatewayPort}:18789`,
           "-e", `WINCLAW_GRC_URL=http://host.docker.internal:${grcPort}`];
         if (node.employeeName) dockerArgs.push("-e", `employee_name=${node.employeeName}`);
@@ -1060,7 +1075,22 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           execFileSync("docker", ["rm", node.containerId], { encoding: "utf-8" });
           logger.info({ containerId: node.containerId }, "Docker container stopped and removed");
         } catch (err: any) {
-          logger.warn({ err: err.message, containerId: node.containerId }, "Failed to remove Docker container");
+          logger.warn({ err: err.message, containerId: node.containerId }, "Failed to remove Docker container by ID, trying by port");
+          // Fallback: find container by gateway port and stop it
+          if (node.gatewayPort) {
+            try {
+              const portContainers = execFileSync("docker", ["ps", "-q", "--filter", `publish=${node.gatewayPort}`], { encoding: "utf-8" }).trim();
+              if (portContainers) {
+                for (const cid of portContainers.split("\n").filter(Boolean)) {
+                  try {
+                    execFileSync("docker", ["stop", cid], { encoding: "utf-8" });
+                    execFileSync("docker", ["rm", cid], { encoding: "utf-8" });
+                    logger.info({ containerId: cid, port: node.gatewayPort }, "Stopped container found by port fallback");
+                  } catch { /* best effort */ }
+                }
+              }
+            } catch { /* non-fatal */ }
+          }
         }
       } else if (node.provisioningMode === "daytona_sandbox" && node.sandboxId) {
         const DAYTONA_API_KEY = process.env.DAYTONA_API_KEY || "dtn_a92ccd0521fdaf9bc2c173087e23a3a52edc2d67fbb6a3508871a614a474b023";

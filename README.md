@@ -14,7 +14,7 @@ GRC (Global Resource Center) is the easiest way to run AI agent workers — call
 
 | Platform | Link |
 |----------|------|
-| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.2.exe/download) |
+| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.3.exe/download) |
 | macOS | Coming Soon |
 
 ## Quick Start (3 Steps)

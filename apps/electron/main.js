@@ -141,6 +141,8 @@ function defaultConfig() {
  */
 function loadConfig() {
   ensureDir(appDataDir);
+  ensureDir(logsDir);
+  ensureDir(dataDir);
 
   let loaded = {};
   if (fs.existsSync(configPath)) {
@@ -248,6 +250,9 @@ function buildServerEnv() {
   env.GRC_DB_DIALECT = config.dbDialect || "sqlite";
   env.GRC_DATA_DIR = config.dataDir || dataDir;
   env.GRC_SQLITE_PATH = config.sqlitePath || sqlitePath;
+
+  // Tell the server where to store skill tarballs locally
+  env.GRC_SKILLS_LOCAL_PATH = path.join(dataDir, "skills");
 
   if (config.databaseUrl) {
     env.DATABASE_URL = config.databaseUrl;
@@ -699,6 +704,15 @@ ipcMain.handle("get-config", () => ({
   dataDir: config.dataDir,
   sqlitePath: config.sqlitePath,
 }));
+
+ipcMain.handle("select-directory", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openDirectory"],
+    title: "Select Workspace Directory",
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
+});
 
 ipcMain.handle("set-db-dialect", async (_event, dialect) => {
   const allowed = ["sqlite", "mysql", "postgres"];

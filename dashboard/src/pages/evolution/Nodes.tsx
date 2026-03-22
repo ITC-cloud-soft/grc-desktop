@@ -483,10 +483,17 @@ export function Nodes() {
                     disabled={provisionNode.isPending}
                     onClick={async () => {
                       try {
+                        // Electron desktop: use IPC to get full path via native dialog
+                        const grc = (window as any).grcDesktop;
+                        if (grc?.selectDirectory) {
+                          const fullPath = await grc.selectDirectory();
+                          if (fullPath) setWorkspacePath(fullPath);
+                          return;
+                        }
+                        // Browser fallback: showDirectoryPicker (name only)
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const dirHandle = await (window as any).showDirectoryPicker({ mode: 'read' });
                         if (dirHandle?.name) {
-                          // Build full path: workspacesBase + selected folder name
                           const sep = workspacesBase.includes('/') ? '/' : '\\';
                           const base = workspacesBase || '';
                           if (base) {

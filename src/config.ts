@@ -7,6 +7,7 @@
 
 import { generateKeyPairSync } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 
@@ -89,20 +90,37 @@ export interface GrcConfig {
   };
 }
 
-/** Path where dev JWT keys are persisted between restarts. */
-const DEV_JWT_KEYS_PATH = path.join(
-  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")),
-  "..",
-  ".dev-jwt-keys.json",
-);
+/**
+ * Path where dev JWT keys are persisted between restarts.
+ *
+ * Keys are stored in the GRC data directory (%APPDATA%/GRC or GRC_DATA_DIR)
+ * so they survive application reinstallation. Previously they were saved in
+ * the project/install directory which meant reinstalling would regenerate
+ * keys and invalidate all existing tokens.
+ */
+const GRC_DATA_DIR = process.env.GRC_DATA_DIR
+  || path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "GRC");
+
+const DEV_JWT_KEYS_PATH = (() => {
+  // GRC_DATA_DIR is already the data directory (e.g. %APPDATA%/GRC/data from Electron)
+  // If not set, use %APPDATA%/GRC directly
+  const keysDir = GRC_DATA_DIR;
+  // Ensure the directory exists (created recursively)
+  try {
+    fs.mkdirSync(keysDir, { recursive: true });
+  } catch {
+    // Best-effort — loadOrGenerateDevKeyPair will handle write errors
+  }
+  return path.join(keysDir, ".jwt-keys.json");
+})();
 
 /**
  * Load or generate an RSA key pair for development use.
  *
- * Keys are persisted to `.dev-jwt-keys.json` in the project root so that
- * tokens issued by a previous GRC instance remain valid after a restart.
- * This eliminates the need to refresh tokens on every connected WinClaw
- * node whenever GRC is restarted during development.
+ * Keys are persisted to the GRC data directory (e.g. %APPDATA%/GRC/data/.jwt-keys.json)
+ * so that tokens issued by a previous GRC instance remain valid after a restart
+ * or reinstallation. This eliminates the need to refresh tokens on every
+ * connected WinClaw node whenever GRC is restarted.
  */
 function loadOrGenerateDevKeyPair(): { publicKey: string; privateKey: string } {
   // Try to load persisted keys first

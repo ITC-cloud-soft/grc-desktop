@@ -442,11 +442,16 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           "--network", "bridge"];
         if (body.employeeName) dockerArgs.push("-e", `employee_name=${body.employeeName}`);
         if (body.employeeCode) dockerArgs.push("-e", `employee_code=${body.employeeCode}`);
+        if (body.employeeEmail) dockerArgs.push("-e", `employee_email=${body.employeeEmail}`);
         dockerArgs.push("-v", `${body.workspacePath}:/home/winclaw/.winclaw/workspace`);
         // Persist device identity inside workspace dir so each node has unique identity
         const identityPath = path.join(body.workspacePath, ".identity");
         fs.mkdirSync(identityPath, { recursive: true });
         dockerArgs.push("-v", `${identityPath}:/home/winclaw/.winclaw/identity`);
+        // Config persistence volume for preserving settings across restarts (换水)
+        const configPersistPath = path.join(body.workspacePath, ".config");
+        fs.mkdirSync(configPersistPath, { recursive: true });
+        dockerArgs.push("-v", `${configPersistPath}:/home/winclaw/.winclaw/config-persist`);
         dockerArgs.push("itccloudsoft/winclaw-node:latest");
 
         logger.info({ dockerArgs }, "Provisioning local Docker node");
@@ -812,6 +817,34 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           }
         }
 
+        // Extract config files from old container BEFORE removing it
+        const configPersistPath = node.workspacePath
+          ? path.join(node.workspacePath, ".config")
+          : null;
+        if (configPersistPath) {
+          fs.mkdirSync(configPersistPath, { recursive: true });
+          try {
+            execFileSync("docker", ["cp",
+              `${node.containerId}:/home/winclaw/.winclaw/winclaw.json`,
+              path.join(configPersistPath, "winclaw.json"),
+            ], { encoding: "utf-8" });
+            execFileSync("docker", ["cp",
+              `${node.containerId}:/home/winclaw/.winclaw/grc-config-state.json`,
+              path.join(configPersistPath, "grc-config-state.json"),
+            ], { encoding: "utf-8" });
+            // Also try to extract OAuth credentials
+            try {
+              execFileSync("docker", ["cp",
+                `${node.containerId}:/home/winclaw/.winclaw/credentials/oauth.json`,
+                path.join(configPersistPath, "oauth.json"),
+              ], { encoding: "utf-8" });
+            } catch { /* OAuth may not exist, non-fatal */ }
+            logger.info({ configPersistPath }, "Extracted config from old container for preservation");
+          } catch (err: any) {
+            logger.warn({ err: err.message }, "Could not extract config from old container (non-fatal)");
+          }
+        }
+
         // Stop and remove old container
         try {
           execFileSync("docker", ["stop", node.containerId], { encoding: "utf-8" });
@@ -822,15 +855,33 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
         // Re-run with same config
         const grcPort = process.env.PORT || "3200";
-        const dockerArgs = ["run", "-d", "-p", `${node.gatewayPort}:18789`,
+        const dockerArgs = ["run", "-d", "--pull", "always", "-p", `${node.gatewayPort}:18789`,
           "-e", `WINCLAW_GRC_URL=http://host.docker.internal:${grcPort}`];
         if (node.employeeName) dockerArgs.push("-e", `employee_name=${node.employeeName}`);
         if (node.employeeId) dockerArgs.push("-e", `employee_code=${node.employeeId}`);
+        if (node.employeeEmail) dockerArgs.push("-e", `employee_email=${node.employeeEmail}`);
         if (node.workspacePath) {
           dockerArgs.push("-v", `${node.workspacePath}:/home/winclaw/.winclaw/workspace`);
           dockerArgs.push("-v", `${identityPath}:/home/winclaw/.winclaw/identity`);
+          if (configPersistPath) {
+            dockerArgs.push("-v", `${configPersistPath}:/home/winclaw/.winclaw/config-persist`);
+          }
         }
         dockerArgs.push("itccloudsoft/winclaw-node:latest");
+
+        // Save role/key data from old node BEFORE deletion
+        const preservedData = {
+          roleId: node.roleId,
+          roleMode: node.roleMode,
+          configRevision: node.configRevision,
+          configAppliedRevision: node.configAppliedRevision,
+          primaryKeyId: node.primaryKeyId,
+          auxiliaryKeyId: node.auxiliaryKeyId,
+          keyConfigJson: node.keyConfigJson,
+          employeeName: node.employeeName,
+          employeeId: node.employeeId,
+          employeeEmail: node.employeeEmail,
+        };
 
         // Delete old node record — new container will auto-register with GRC
         await db.delete(nodesTable).where(eq(nodesTable.nodeId, nodeId));
@@ -886,6 +937,19 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
               gatewayPort: node.gatewayPort,
               provisioningMode: "local_docker",
               workspacePath: node.workspacePath,
+              // Restore role assignment from old node
+              ...(preservedData.roleId && { roleId: preservedData.roleId }),
+              ...(preservedData.roleMode && { roleMode: preservedData.roleMode }),
+              ...(preservedData.configRevision && { configRevision: preservedData.configRevision }),
+              ...(preservedData.configAppliedRevision && { configAppliedRevision: preservedData.configAppliedRevision }),
+              // Restore key distribution from old node
+              ...(preservedData.primaryKeyId && { primaryKeyId: preservedData.primaryKeyId }),
+              ...(preservedData.auxiliaryKeyId && { auxiliaryKeyId: preservedData.auxiliaryKeyId }),
+              ...(preservedData.keyConfigJson != null ? { keyConfigJson: preservedData.keyConfigJson } : {}),
+              // Restore employee info
+              ...(preservedData.employeeName && { employeeName: preservedData.employeeName }),
+              ...(preservedData.employeeId && { employeeId: preservedData.employeeId }),
+              ...(preservedData.employeeEmail && { employeeEmail: preservedData.employeeEmail }),
             })
             .where(eq(nodesTable.nodeId, newNodeId));
 

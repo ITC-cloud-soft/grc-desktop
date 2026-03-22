@@ -35,6 +35,7 @@ import { signToken, type JwtPayload } from "../../shared/utils/jwt.js";
 import { nodeIdSchema, uuidSchema } from "../../shared/utils/validators.js";
 import { AuthService } from "./service.js";
 import { getDb } from "../../shared/db/connection.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
 import { users } from "./schema.js";
 import { eq } from "drizzle-orm";
 
@@ -307,23 +308,30 @@ export async function register(app: Express, config: GrcConfig) {
       const body = anonymousBodySchema.parse(req.body);
       const user = await authService.registerAnonymous(body.node_id);
 
+      // Desktop mode (SQLite): grant full write access to anonymous nodes
+      // Cloud mode (MySQL): read-only for anonymous
+      const dialect = getCurrentDialect();
+      const scopes: string[] = dialect === "sqlite"
+        ? ["read", "write", "publish"]
+        : ["read"];
+
       const payload: JwtPayload = {
         sub: user.id,
         node_id: body.node_id,
         tier: "free",
         role: "user",
-        scopes: ["read"],
+        scopes,
       };
       const token = signToken(payload, config.jwt);
 
-      logger.info({ nodeId: body.node_id }, "Anonymous token issued");
+      logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Anonymous token issued");
 
       res.json({
         token,
         user: {
           id: user.id,
           tier: user.tier,
-          scopes: ["read"],
+          scopes,
         },
       });
     }),

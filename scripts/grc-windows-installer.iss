@@ -75,3 +75,28 @@ Filename: "taskkill"; Parameters: "/F /IM node.exe"; Flags: runhidden; RunOnceId
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{userappdata}\GRC');
+    if DirExists(DataDir) then
+    begin
+      if MsgBox(
+        'Do you want to keep your GRC data (database, settings, logs)?'#13#10 +
+        #13#10 +
+        'Location: ' + DataDir + #13#10 +
+        #13#10 +
+        'Click "Yes" to keep data (recommended for reinstall).'#13#10 +
+        'Click "No" to delete all data permanently.',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+      begin
+        DelTree(DataDir, True, True, True);
+      end;
+    end;
+  end;
+end;

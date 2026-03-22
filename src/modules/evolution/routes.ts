@@ -35,6 +35,8 @@ import { nodeConfigSSE } from "./node-config-sse.js";
 import { RolesService } from "../roles/service.js";
 import { AuthService } from "../auth/service.js";
 import { unifiedDelivery } from "../../shared/services/unified-delivery.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
+import { signToken, type JwtPayload } from "../../shared/utils/jwt.js";
 
 const logger = pino({ name: "module:evolution" });
 
@@ -140,6 +142,35 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         rolesService.propagateCompanyContext("new_node_hello").catch(err =>
           logger.warn({ err }, "Failed to propagate context after hello")
         );
+      }
+
+      // Desktop mode (SQLite): issue a JWT with full write scopes so the
+      // connecting node can immediately perform write operations without
+      // requiring manual tier upgrade or email pairing.
+      const dialect = getCurrentDialect();
+      if (dialect === "sqlite") {
+        const upgradedPayload: JwtPayload = {
+          sub: nodeUser.id,
+          node_id: body.node_id,
+          tier: "free",
+          role: "user",
+          scopes: ["read", "write", "publish"],
+          email: nodeUser.email ?? undefined,
+        };
+        const upgradedToken = signToken(upgradedPayload, config.jwt);
+        const refreshToken = await authService.issueRefreshToken(nodeUser.id);
+
+        logger.info({ nodeId: body.node_id }, "Desktop mode: upgraded token issued via hello");
+
+        return res.json({
+          ok: true,
+          node_id: body.node_id,
+          registered: true,
+          node,
+          token: upgradedToken,
+          refreshToken,
+          upgraded: true,
+        });
       }
 
       res.json({

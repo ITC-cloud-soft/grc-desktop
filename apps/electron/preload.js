@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld("grcDesktop", {
   },
   getConfig: () => ipcRenderer.invoke("get-config"),
   setDbDialect: (dialect) => ipcRenderer.invoke("set-db-dialect", dialect),
+  selectDirectory: () => ipcRenderer.invoke("select-directory"),
 });

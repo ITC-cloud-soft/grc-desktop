@@ -14,6 +14,7 @@ import { eq, and, desc, asc, sql, inArray, gt } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
+import { getCurrentDialect } from "../../shared/db/dialect.js";
 import {
   skillsTable,
   skillVersionsTable,
@@ -25,18 +26,12 @@ import {
   searchSkills,
   type SkillSearchDocument,
 } from "./search.js";
-import {
-  uploadTarball,
-  deleteTarball,
-  computeSha256,
-  getTarballUrl,
-} from "./storage.js";
+import { getStorage } from "./storage.js";
 import {
   NotFoundError,
   ConflictError,
   BadRequestError,
 } from "../../shared/middleware/error-handler.js";
-import { getCurrentDialect } from "../../shared/db/dialect.js";
 import type { PaginatedResult } from "../../shared/utils/validators.js";
 
 const logger = pino({ name: "module:clawhub:service" });
@@ -434,8 +429,10 @@ export async function publishSkill(input: PublishInput): Promise<{
 }> {
   const db = getDb();
 
+  const storage = getStorage();
+
   // Compute hash of the tarball
-  const sha256 = computeSha256(input.tarball);
+  const sha256 = storage.computeSha256(input.tarball);
   const tarballSize = input.tarball.length;
 
   // Check if slug already exists
@@ -483,8 +480,8 @@ export async function publishSkill(input: PublishInput): Promise<{
     isNewSkill = true;
   }
 
-  // Upload tarball to MinIO (outside transaction -- cannot be rolled back)
-  const tarballUrl = await uploadTarball(input.slug, input.version, input.tarball);
+  // Upload tarball to storage (outside transaction -- cannot be rolled back)
+  const tarballUrl = await storage.uploadTarball(input.slug, input.version, input.tarball);
 
   // Wrap DB writes in a transaction so skill + version are atomic.
   // If the transaction fails, clean up the uploaded tarball (best-effort compensation).
@@ -563,7 +560,7 @@ export async function publishSkill(input: PublishInput): Promise<{
       { slug: input.slug, version: input.version },
       "Transaction failed during publishSkill — attempting tarball cleanup",
     );
-    deleteTarball(input.slug, input.version).catch((cleanupErr) => {
+    storage.deleteTarball(input.slug, input.version).catch((cleanupErr) => {
       logger.error(
         { err: cleanupErr, slug: input.slug, version: input.version },
         "Failed to clean up tarball after transaction failure",
@@ -746,8 +743,9 @@ export async function downloadSkill(
     })
     .where(eq(skillsTable.id, skillRow.id));
 
-  // Generate presigned download URL
-  const downloadUrl = await getTarballUrl(slug, version);
+  // Generate download URL (SAS URL for Azure, local path for local mode)
+  const storage = getStorage();
+  const downloadUrl = await storage.getTarballUrl(slug, version);
 
   logger.info({ slug, version, userId }, "Skill download recorded");
 

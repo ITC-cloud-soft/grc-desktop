@@ -2,7 +2,7 @@
 
 #define AppName "GRC"
 #define AppFullName "GRC - Global Resource Center"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.3"
 #define AppPublisher "ITC CloudSoft"
 
 [Setup]
@@ -12,7 +12,7 @@ AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppFullName}
-OutputBaseFilename=GRCSetup-{#AppVersion}
+OutputBaseFilename=GRC-DesktopSetup-{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -86,14 +86,7 @@ begin
     DataDir := ExpandConstant('{userappdata}\GRC');
     if DirExists(DataDir) then
     begin
-      if MsgBox(
-        'Do you want to keep your GRC data (database, settings, logs)?'#13#10 +
-        #13#10 +
-        'Location: ' + DataDir + #13#10 +
-        #13#10 +
-        'Click "Yes" to keep data (recommended for reinstall).'#13#10 +
-        'Click "No" to delete all data permanently.',
-        mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
+      if MsgBox('Do you want to keep your GRC data?' + Chr(13) + Chr(10) + Chr(13) + Chr(10) + 'Location: ' + DataDir + Chr(13) + Chr(10) + Chr(13) + Chr(10) + 'Yes = keep data, No = delete all.', mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
       begin
         DelTree(DataDir, True, True, True);
       end;

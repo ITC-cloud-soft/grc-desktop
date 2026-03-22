@@ -1,6 +1,6 @@
 {
   "name": "grc-desktop",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "GRC - Global Resource Center Desktop",
   "main": "main.js",
   "scripts": {

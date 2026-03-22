@@ -49,7 +49,11 @@ function rowToAsset(
     userId: (row.userId as string) ?? undefined,
     category: (row.category as string) ?? undefined,
     status: row.status as AssetStatus,
-    signalsMatch: (row.signalsMatch as string[] | null) ?? [],
+    signalsMatch: Array.isArray(row.signalsMatch)
+      ? row.signalsMatch as string[]
+      : typeof row.signalsMatch === 'string'
+        ? (() => { try { const p = JSON.parse(row.signalsMatch); return Array.isArray(p) ? p : []; } catch { return []; } })()
+        : [],
     contentHash: row.contentHash as string,
     signature: (row.signature as string) ?? undefined,
     useCount: row.useCount as number,

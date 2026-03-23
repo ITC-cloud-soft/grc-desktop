@@ -105,8 +105,9 @@ const pairVerifyBodySchema = z.object({
  */
 function createAuthRateLimit() {
   const store = new Map<string, { count: number; resetAt: number }>();
-  const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-  const MAX_REQUESTS = 20;
+  const isDesktop = getCurrentDialect() === "sqlite";
+  const WINDOW_MS = isDesktop ? 1 * 60 * 1000 : 15 * 60 * 1000; // Desktop: 1min, Cloud: 15min
+  const MAX_REQUESTS = isDesktop ? 500 : 20; // Desktop: 500/min (local only), Cloud: 20/15min
 
   // Cleanup expired entries every 5 minutes
   setInterval(() => {
@@ -299,7 +300,7 @@ export async function register(app: Express, config: GrcConfig) {
   );
 
   // ── Anonymous Token ─────────────────────────────
-  // Anonymous sessions get an access token only — no refresh token.
+  // Anonymous sessions get an access token + refresh token for long-lived nodes.
 
   router.post(
     "/anonymous",
@@ -324,10 +325,14 @@ export async function register(app: Express, config: GrcConfig) {
       };
       const token = signToken(payload, config.jwt);
 
-      logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Anonymous token issued");
+      // Issue refresh token so nodes can renew access without re-registering
+      const refreshToken = await authService.issueRefreshToken(user.id);
+
+      logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Anonymous token issued with refresh token");
 
       res.json({
         token,
+        refreshToken,
         user: {
           id: user.id,
           tier: user.tier,

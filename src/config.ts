@@ -253,7 +253,7 @@ export function loadConfig(): GrcConfig {
       privateKey: jwtPrivateKey,
       publicKey: jwtPublicKey,
       issuer: envString("JWT_ISSUER", "grc.winclawhub.ai"),
-      expiresIn: envString("JWT_EXPIRES_IN", "15m"),
+      expiresIn: envString("JWT_EXPIRES_IN", "24h"),
       refreshTokenExpiresIn: envString("JWT_REFRESH_EXPIRES_IN", "30d"),
     },
 

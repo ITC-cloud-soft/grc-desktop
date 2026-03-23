@@ -14,7 +14,7 @@ GRC（Global Resource Center）是在你的电脑上运行 AI 智能体员工—
 
 | 平台 | 链接 |
 |------|------|
-| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.3.exe/download) |
+| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/latest/download) |
 | macOS | 即将推出 |
 
 ## 快速开始（3 步）
@@ -131,7 +131,7 @@ GRC（Global Resource Center）是在你的电脑上运行 AI 智能体员工—
 ## 链接
 
 - [WinClaw（AI 智能体引擎）](https://github.com/itc-ou-shigou/winclaw)
-- [从 SourceForge 下载](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.2.exe/download)
+- [从 SourceForge 下载](https://sourceforge.net/projects/grc-desktop/files/latest/download)
 
 ## 许可证
 

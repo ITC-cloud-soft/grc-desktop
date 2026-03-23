@@ -14,7 +14,7 @@ GRC (Global Resource Center) is the easiest way to run AI agent workers — call
 
 | Platform | Link |
 |----------|------|
-| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.3.exe/download) |
+| Windows | [GRC-DesktopSetup-1.0.2.exe](https://sourceforge.net/projects/grc-desktop/files/latest/download) |
 | macOS | Coming Soon |
 
 ## Quick Start (3 Steps)
@@ -131,7 +131,7 @@ Click **"Restart"** (Change Water) on any Claw in the Claw Pool to update it to 
 ## Links
 
 - [WinClaw (AI Agent Engine)](https://github.com/itc-ou-shigou/winclaw)
-- [Download from SourceForge](https://sourceforge.net/projects/grc-desktop/files/GRC-DesktopSetup-1.0.2.exe/download)
+- [Download from SourceForge](https://sourceforge.net/projects/grc-desktop/files/latest/download)
 
 ## License
 

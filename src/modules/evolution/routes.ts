@@ -145,18 +145,9 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
       logger.debug({ nodeId: body.node_id, role: body.employee_role, gatewayPort: body.gateway_port, containerId: body.container_id }, "Hello received");
 
-      // Propagate company context if this node has a role assigned
-      const helloNode = await getDb()
-        .select({ roleId: nodesTable.roleId })
-        .from(nodesTable)
-        .where(eq(nodesTable.nodeId, body.node_id))
-        .limit(1);
-
-      if (helloNode[0]?.roleId) {
-        rolesService.propagateCompanyContext("new_node_hello").catch(err =>
-          logger.warn({ err }, "Failed to propagate context after hello")
-        );
-      }
+      // Note: company context propagation moved to role_assignment only.
+      // Running it on every hello caused an infinite SSE loop:
+      // hello → propagate → config_update SSE → node re-syncs → hello → loop
 
       // Desktop mode (SQLite): issue a JWT with full write scopes so the
       // connecting node can immediately perform write operations without

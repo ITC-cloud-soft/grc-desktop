@@ -64,7 +64,7 @@ export async function createDbAdapter(config: {
 export function getDefaultSqlitePath(): string {
   const appData =
     process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-  const dir = path.join(appData, "GRC");
+  const dir = path.join(appData, "GRC", "data");
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, "grc.db");
 }

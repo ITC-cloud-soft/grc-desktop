@@ -88,7 +88,7 @@ function initSqlite(dbPath?: string) {
   sqliteRaw = new Database(finalPath);
   sqliteRaw.pragma("journal_mode = WAL");
   sqliteRaw.pragma("foreign_keys = ON");
-  sqliteRaw.pragma("busy_timeout = 5000");
+  sqliteRaw.pragma("busy_timeout = 30000");
   sqliteRaw.pragma("synchronous = NORMAL");
   sqliteRaw.pragma("cache_size = -64000"); // 64MB cache
   sqliteRaw.pragma("temp_store = MEMORY");

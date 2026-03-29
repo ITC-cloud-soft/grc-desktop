@@ -277,15 +277,20 @@ export function AssetDetail() {
             </p>
           </div>
           <div style={{ padding: '0.75rem 1rem 1rem' }}>
-            {Array.isArray(asset.signalsMatch) && asset.signalsMatch.length > 0 ? (
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {asset.signalsMatch.map((s) => (
-                  <span key={s} className="badge badge-info" style={{ fontSize: 13, padding: '4px 10px' }}>{s}</span>
-                ))}
-              </div>
-            ) : (
-              <span className="text-muted">{t('assetDetail.noSignals')}</span>
-            )}
+            {(() => {
+              const signals = typeof asset.signalsMatch === 'string'
+                ? (() => { try { const p = JSON.parse(asset.signalsMatch); return Array.isArray(p) ? p : []; } catch { return []; } })()
+                : Array.isArray(asset.signalsMatch) ? asset.signalsMatch : [];
+              return signals.length > 0 ? (
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {signals.map((s: string) => (
+                    <span key={s} className="badge badge-info" style={{ fontSize: 13, padding: '4px 10px' }}>{s}</span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-muted">{t('assetDetail.noSignals')}</span>
+              );
+            })()}
           </div>
         </div>
 
@@ -298,44 +303,63 @@ export function AssetDetail() {
             </p>
           </div>
           <div style={{ padding: '0 1rem 1rem' }}>
-            {asset.strategy && Array.isArray(asset.strategy) && asset.strategy.length > 0 ? (
-              <ol style={{ margin: 0, paddingLeft: '1.5rem', lineHeight: 1.9 }}>
-                {(asset.strategy as string[]).map((step: string, i: number) => (
-                  <li key={i} style={{ marginBottom: 6, fontSize: 14 }}>{step}</li>
-                ))}
-              </ol>
-            ) : asset.strategy && !Array.isArray(asset.strategy) ? (
-              <pre style={{ padding: 12, fontSize: 12, overflow: 'auto', maxHeight: 300, background: 'var(--bg-secondary)', borderRadius: 4, margin: 0 }}>
-                {JSON.stringify(asset.strategy, null, 2)}
-              </pre>
-            ) : (
-              <span className="text-muted">{t('assetDetail.noStrategy')}</span>
-            )}
+            {(() => {
+              const raw = asset.strategy;
+              const parsed = typeof raw === 'string'
+                ? (() => { try { return JSON.parse(raw); } catch { return raw; } })()
+                : raw;
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                return (
+                  <ol style={{ margin: 0, paddingLeft: '1.5rem', lineHeight: 1.9 }}>
+                    {parsed.map((step: string, i: number) => (
+                      <li key={i} style={{ marginBottom: 6, fontSize: 14 }}>{typeof step === 'string' ? step : JSON.stringify(step)}</li>
+                    ))}
+                  </ol>
+                );
+              }
+              if (parsed && typeof parsed === 'object') {
+                return (
+                  <pre style={{ padding: 12, fontSize: 12, overflow: 'auto', maxHeight: 300, background: 'var(--bg-secondary)', borderRadius: 4, margin: 0 }}>
+                    {JSON.stringify(parsed, null, 2)}
+                  </pre>
+                );
+              }
+              if (parsed) {
+                return <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{String(parsed)}</div>;
+              }
+              return <span className="text-muted">{t('assetDetail.noStrategy')}</span>;
+            })()}
           </div>
         </div>
 
         {/* Preconditions / Constraints Card */}
-        {asset.constraintsData && (
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <div className="card-header"><h2 className="card-title">⚙️ {t('assetDetail.preconditions')}</h2></div>
-            <div style={{ padding: '0 1rem 1rem' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <tbody>
-                  {Object.entries(asset.constraintsData).map(([key, value]) => (
-                    <tr key={key} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.4rem 0.5rem', color: 'var(--color-text-muted)', width: '35%', fontWeight: 500 }}>{key}</td>
-                      <td style={{ padding: '0.4rem 0.5rem' }}>
-                        {typeof value === 'object'
-                          ? <code style={{ fontSize: 12 }}>{JSON.stringify(value)}</code>
-                          : String(value)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {asset.constraintsData && (() => {
+          const parsed = typeof asset.constraintsData === 'string'
+            ? (() => { try { return JSON.parse(asset.constraintsData); } catch { return null; } })()
+            : asset.constraintsData;
+          if (!parsed || typeof parsed !== 'object') return null;
+          return (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header"><h2 className="card-title">⚙️ {t('assetDetail.preconditions')}</h2></div>
+              <div style={{ padding: '0 1rem 1rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {Object.entries(parsed).map(([key, value]) => (
+                      <tr key={key} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '0.4rem 0.5rem', color: 'var(--color-text-muted)', width: '35%', fontWeight: 500 }}>{key}</td>
+                        <td style={{ padding: '0.4rem 0.5rem' }}>
+                          {typeof value === 'object'
+                            ? <code style={{ fontSize: 12 }}>{JSON.stringify(value)}</code>
+                            : String(value)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Validation Card */}
         {Array.isArray(asset.validation) && asset.validation.length > 0 && (

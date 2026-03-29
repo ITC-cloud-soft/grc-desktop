@@ -177,6 +177,9 @@ export const nodesTable = sqliteTable(
     primaryKeyId: text("primary_key_id"),
     auxiliaryKeyId: text("auxiliary_key_id"),
     keyConfigJson: text("key_config_json", { mode: "json" }),
+    // ── API Key authorization fields ──
+    apiKeyId: text("api_key_id"),
+    apiKeyAuthorized: integer("api_key_authorized", { mode: "boolean" }).notNull().default(false),
     // ── Node provisioning fields ──
     provisioningMode: text("provisioning_mode"),
     // MySQL equivalent: mysqlEnum("provisioning_mode", ["local_docker", "daytona_sandbox"])

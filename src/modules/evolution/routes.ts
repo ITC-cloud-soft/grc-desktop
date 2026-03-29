@@ -124,13 +124,14 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
       if (body.employee_role) {
         nodeUpdateSet.roleId = body.employee_role;
       }
-      // Update gateway info from reconnecting Docker containers
-      if (body.gateway_port) {
-        nodeUpdateSet.gatewayPort = body.gateway_port;
+      // Update gateway info from reconnecting containers or npm-installed nodes
+      if (body.gateway_port || body.gateway_token) {
+        const port = body.gateway_port ?? (node as Record<string, unknown>)?.gatewayPort ?? 18789;
+        if (body.gateway_port) nodeUpdateSet.gatewayPort = body.gateway_port;
         const gwToken = body.gateway_token ?? "";
         const gwUrl = gwToken
-          ? `http://localhost:${body.gateway_port}/chat?token=${gwToken}`
-          : `http://localhost:${body.gateway_port}/chat`;
+          ? `http://localhost:${port}/chat?token=${gwToken}`
+          : `http://localhost:${port}/chat`;
         nodeUpdateSet.gatewayUrl = gwUrl;
       }
       if (body.container_id) {
@@ -148,6 +149,38 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
       // Note: company context propagation moved to role_assignment only.
       // Running it on every hello caused an infinite SSE loop:
       // hello → propagate → config_update SSE → node re-syncs → hello → loop
+
+      // ── API Key handling ──────────────────────────
+      // Per review: do NOT re-issue key on every hello.
+      // - If node already has apiKeyId → return status only (no rawKey)
+      // - If node is provisioned (Docker) but has no key yet → auto-issue once
+      const nodeRecord = node as Record<string, unknown>;
+      let apiKeyResponse: Record<string, unknown> = {};
+
+      if (nodeRecord.apiKeyId) {
+        // Node already has an API Key — tell WinClaw it's active
+        apiKeyResponse = {
+          api_key_status: "active",
+          api_key_id: nodeRecord.apiKeyId,
+        };
+      } else if (nodeRecord.provisioningMode) {
+        // Docker/Daytona node without API Key yet — auto-issue on first hello
+        try {
+          const { rawKey, keyId } = await authService.issueApiKeyForNode(nodeUser.id, body.node_id);
+          await getDb()
+            .update(nodesTable)
+            .set({ apiKeyId: keyId, apiKeyAuthorized: 1 as unknown as boolean })
+            .where(eq(nodesTable.nodeId, body.node_id));
+          apiKeyResponse = {
+            api_key: rawKey,        // Only time rawKey is sent
+            api_key_status: "new",
+            api_key_id: keyId,
+          };
+          logger.info({ nodeId: body.node_id, keyId }, "API key auto-issued for provisioned node on first hello");
+        } catch (err) {
+          logger.warn({ nodeId: body.node_id, err }, "Failed to auto-issue API key for node");
+        }
+      }
 
       // Desktop mode (SQLite): issue a JWT with full write scopes so the
       // connecting node can immediately perform write operations without
@@ -175,6 +208,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
           token: upgradedToken,
           refreshToken,
           upgraded: true,
+          ...apiKeyResponse,
         });
       }
 
@@ -183,6 +217,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
         node_id: body.node_id,
         registered: true,
         node,
+        ...apiKeyResponse,
       });
     }),
   );
@@ -560,6 +595,19 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
       if (!nodeId || nodeId.length < 10) {
         res.status(400).json({ ok: false, error: "node_id query parameter required" });
         return;
+      }
+
+      // API Key query parameter authentication for SSE
+      // (EventSource cannot set custom headers, so api_key is passed as query param)
+      const apiKeyParam = req.query.api_key as string | undefined;
+      if (apiKeyParam && !req.auth?.sub) {
+        const resolved = await authService.resolveApiKey(apiKeyParam);
+        if (!resolved) {
+          res.status(401).json({ ok: false, error: "invalid_api_key" });
+          return;
+        }
+        // Attach resolved auth to request so downstream logic can use it
+        (req as any).auth = { sub: resolved.userId, tier: resolved.tier, scopes: resolved.scopes };
       }
 
       // Set SSE headers

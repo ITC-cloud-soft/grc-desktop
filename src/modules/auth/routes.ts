@@ -316,6 +316,10 @@ export async function register(app: Express, config: GrcConfig) {
         ? ["read", "write", "publish"]
         : ["read"];
 
+      // Local connections get longer-lived tokens (7 days vs default 24h)
+      const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const expiresInOverride = isLocal ? '7d' : undefined;
+
       const payload: JwtPayload = {
         sub: user.id,
         node_id: body.node_id,
@@ -323,12 +327,16 @@ export async function register(app: Express, config: GrcConfig) {
         role: "user",
         scopes,
       };
-      const token = signToken(payload, config.jwt);
+      const token = signToken(payload, config.jwt, expiresInOverride);
 
       // Issue refresh token so nodes can renew access without re-registering
       const refreshToken = await authService.issueRefreshToken(user.id);
 
-      logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Anonymous token issued with refresh token");
+      if (isLocal) {
+        logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Issuing local token with 7d expiry");
+      } else {
+        logger.info({ nodeId: body.node_id, scopes, desktop: dialect === "sqlite" }, "Anonymous token issued with refresh token");
+      }
 
       res.json({
         token,
@@ -619,14 +627,22 @@ export async function register(app: Express, config: GrcConfig) {
     asyncHandler(async (req: Request, res: Response) => {
       const body = refreshBodySchema.parse(req.body);
 
-      const result = await authService.refreshAccessToken(body.refresh_token);
+      // Local connections get longer-lived tokens (7 days) with rolling refresh
+      const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const expiresInOverride = isLocal ? '7d' : undefined;
+
+      const result = await authService.refreshAccessToken(body.refresh_token, expiresInOverride);
       if (!result) {
         throw new UnauthorizedError(
           "Refresh token is invalid, expired, or already revoked",
         );
       }
 
-      logger.info("Token refreshed successfully");
+      if (isLocal) {
+        logger.info("Local token refreshed with 7d expiry (rolling refresh)");
+      } else {
+        logger.info("Token refreshed successfully");
+      }
 
       res.json({
         access_token: result.accessToken,
@@ -831,6 +847,23 @@ export async function register(app: Express, config: GrcConfig) {
       await authService.revokeAllUserTokens(req.auth.sub);
       res.json({ ok: true, message: "All sessions revoked" });
     }),
+  );
+
+  // ── Local Bootstrap (WinClaw compatibility check) ─────
+
+  router.get(
+    "/local-bootstrap",
+    (req: Request, res: Response) => {
+      const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      if (!isLocal) {
+        return res.status(403).json({ error: "Only available from localhost" });
+      }
+      res.json({
+        supported: true,
+        version: "0.1.0",
+        features: ["anonymous-auth", "token-refresh", "desktop-mode"],
+      });
+    },
   );
 
   // ── Mount Routes ────────────────────────────────

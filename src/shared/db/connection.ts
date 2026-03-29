@@ -170,6 +170,25 @@ export function getDialect(): DbDialect {
 }
 
 /**
+ * Execute a function transactionally.
+ * MySQL: uses real db.transaction() with async support.
+ * SQLite (better-sqlite3): cannot use async inside transactions,
+ * so we run the function directly (auto-commit per statement).
+ * This is safe for Desktop mode (single user, no concurrency).
+ */
+export async function safeTransaction<T>(
+  db: ReturnType<typeof getDb>,
+  fn: (tx: ReturnType<typeof getDb>) => Promise<T>,
+): Promise<T> {
+  if (currentDialect === "sqlite") {
+    // SQLite: run without transaction wrapper (better-sqlite3 doesn't support async tx)
+    return fn(db);
+  }
+  // MySQL: real async transaction
+  return (db as any).transaction(fn);
+}
+
+/**
  * Returns the MySQL connection pool.
  * Throws if running in SQLite mode.
  */

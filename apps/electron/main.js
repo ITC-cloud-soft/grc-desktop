@@ -173,6 +173,32 @@ function saveConfig() {
 function initLogging() {
   ensureDir(logsDir);
   ensureDir(dataDir);
+
+  // Log rotation: delete log files older than 7 days, cap total at 500MB
+  try {
+    const MAX_LOG_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const MAX_TOTAL_LOG_BYTES = 500 * 1024 * 1024; // 500MB
+    const now = Date.now();
+    const logFiles = fs.readdirSync(logsDir)
+      .filter((f) => f.startsWith("app-") && f.endsWith(".log"))
+      .map((f) => ({ name: f, path: path.join(logsDir, f), stat: fs.statSync(path.join(logsDir, f)) }))
+      .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs); // newest first
+
+    // Delete old files
+    for (const f of logFiles) {
+      if (now - f.stat.mtimeMs > MAX_LOG_AGE_MS) {
+        fs.unlinkSync(f.path);
+      }
+    }
+
+    // Cap total size (delete oldest first)
+    let totalBytes = logFiles.reduce((sum, f) => sum + f.stat.size, 0);
+    for (let i = logFiles.length - 1; i >= 0 && totalBytes > MAX_TOTAL_LOG_BYTES; i--) {
+      try { fs.unlinkSync(logFiles[i].path); } catch {}
+      totalBytes -= logFiles[i].stat.size;
+    }
+  } catch {}
+
   logStream = fs.createWriteStream(logFilePath, { flags: "a" });
   logStream.on("error", (err) => {
     process.stderr.write(`Log stream error: ${err.message}\n`);
@@ -314,10 +340,21 @@ function startServer() {
       serverProcess = null;
 
       if (!isQuitting) {
-        // Notify renderer that server died unexpectedly
+        // Auto-restart server after unexpected crash
+        logger.info("Auto-restarting server in 3 seconds...");
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("server-restarting");
         }
+        setTimeout(async () => {
+          if (!isQuitting) {
+            try {
+              await startServer();
+              logger.info("Server auto-restarted successfully");
+            } catch (err) {
+              logger.error(`Server auto-restart failed: ${err.message}`);
+            }
+          }
+        }, 3000);
       }
     });
 

@@ -2,7 +2,7 @@
 
 #define AppName "GRC"
 #define AppFullName "GRC - Global Resource Center"
-#define AppVersion "1.0.7"
+#define AppVersion "1.0.8"
 #define AppPublisher "ITC CloudSoft"
 
 [Setup]

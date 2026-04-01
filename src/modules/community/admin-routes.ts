@@ -254,7 +254,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
         // Delete each topic and its associated data
         for (const topic of topicRows) {
-          await cascadeDeleteTopic(tx, topic.id);
+          await cascadeDeleteTopic(tx as any, topic.id);
         }
 
         // Remove subscriptions
@@ -417,7 +417,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         case "delete":
           // Hard delete — cascade-delete replies, votes, and the topic in a transaction
           await safeTransaction(db, async (tx) => {
-            await cascadeDeleteTopic(tx, id);
+            await cascadeDeleteTopic(tx as any, id);
           });
 
           logger.info(
@@ -465,7 +465,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
       // Cascade-delete replies, votes, and the topic in a transaction
       await safeTransaction(db, async (tx) => {
-        await cascadeDeleteTopic(tx, id);
+        await cascadeDeleteTopic(tx as any, id);
       });
 
       logger.info({ postId: id, admin: req.auth?.sub }, "Post deleted by admin");

@@ -118,7 +118,11 @@ function initSqlite(dbPath?: string) {
     const origRun = stmt.run.bind(stmt);
     const origGet = stmt.get.bind(stmt);
     const fixParams = (params: any[]) =>
-      params.map((p: any) => (p instanceof Date ? p.toISOString() : p));
+      params.map((p: any) => {
+        if (p instanceof Date) return p.toISOString();
+        if (typeof p === "boolean") return p ? 1 : 0;
+        return p;
+      });
     // Patch output: convert ISO date strings back to Date objects so Drizzle's
     // MySQL timestamp mapper (which expects Date) works correctly with SQLite TEXT columns.
     const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/;

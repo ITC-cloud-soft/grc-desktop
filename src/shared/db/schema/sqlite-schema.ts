@@ -180,6 +180,7 @@ export const nodesTable = sqliteTable(
     // ── API Key authorization fields ──
     apiKeyId: text("api_key_id"),
     apiKeyAuthorized: integer("api_key_authorized", { mode: "boolean" }).notNull().default(false),
+    githubToken: text("github_token"),
     // ── Node provisioning fields ──
     provisioningMode: text("provisioning_mode"),
     // MySQL equivalent: mysqlEnum("provisioning_mode", ["local_docker", "daytona_sandbox"])

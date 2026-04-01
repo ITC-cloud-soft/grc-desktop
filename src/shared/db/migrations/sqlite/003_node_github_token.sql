@@ -1,0 +1,1 @@
+ALTER TABLE nodes ADD COLUMN github_token TEXT DEFAULT NULL;

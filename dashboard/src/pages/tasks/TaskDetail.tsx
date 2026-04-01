@@ -291,9 +291,9 @@ export function TaskDetail() {
           <div style={{ marginTop: '1rem' }}>
             <div className="form-label">Depends On</div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {task.dependsOn.map((dep) => (
-                <span key={dep} className="tag mono">
-                  {dep}
+              {task.dependsOn.map((dep: any) => (
+                <span key={String(dep)} className="tag mono">
+                  {String(dep)}
                 </span>
               ))}
             </div>
@@ -304,9 +304,9 @@ export function TaskDetail() {
           <div style={{ marginTop: '1rem' }}>
             <div className="form-label">Collaborators</div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {task.collaborators.map((c) => (
-                <span key={c} className="tag mono">
-                  {c}
+              {task.collaborators.map((c: any) => (
+                <span key={String(c)} className="tag mono">
+                  {String(c)}
                 </span>
               ))}
             </div>
@@ -321,9 +321,9 @@ export function TaskDetail() {
             Deliverables
           </h2>
           <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
-            {task.deliverables.map((d, i) => (
+            {task.deliverables.map((d: any, i: number) => (
               <li key={i} style={{ marginBottom: '0.25rem' }}>
-                {d}
+                {String(d)}
               </li>
             ))}
           </ul>

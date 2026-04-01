@@ -65,10 +65,10 @@ export function AssetDetail() {
   const asset = raw ? {
     ...raw,
     signalsMatch: parseJson(raw.signalsMatch),
-    capabilities: parseJson((raw as Record<string, unknown>).capabilities),
-    strategy: typeof (raw as Record<string, unknown>).strategy === 'string'
-      ? (() => { try { return JSON.parse((raw as Record<string, unknown>).strategy as string); } catch { return (raw as Record<string, unknown>).strategy; } })()
-      : (raw as Record<string, unknown>).strategy,
+    capabilities: parseJson((raw as unknown as Record<string, unknown>).capabilities),
+    strategy: typeof (raw as unknown as Record<string, unknown>).strategy === 'string'
+      ? (() => { try { return JSON.parse((raw as unknown as Record<string, unknown>).strategy as string); } catch { return (raw as unknown as Record<string, unknown>).strategy; } })()
+      : (raw as unknown as Record<string, unknown>).strategy,
   } : null;
   if (!asset) {
     return (

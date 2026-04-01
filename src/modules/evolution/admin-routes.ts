@@ -349,6 +349,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     employee_id: z.string().max(100).optional(),
     employee_name: z.string().max(255).optional(),
     employee_email: z.string().max(255).optional(),
+    github_token: z.string().max(500).optional(),
   });
 
   router.patch(
@@ -365,6 +366,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           ...(body.employee_id !== undefined && { employeeId: body.employee_id }),
           ...(body.employee_name !== undefined && { employeeName: body.employee_name }),
           ...(body.employee_email !== undefined && { employeeEmail: body.employee_email }),
+          ...(body.github_token !== undefined && { githubToken: body.github_token }),
         })
         .where(eq(nodesTable.nodeId, nodeId));
 
@@ -493,6 +495,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
     employeeName: z.string().optional(),
     employeeCode: z.string().optional(),
     employeeEmail: z.string().optional(),
+    githubToken: z.string().optional(),
   });
 
   router.post(
@@ -521,7 +524,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
 
         // Build docker run arguments (use execFileSync to prevent command injection)
         const { execFileSync } = await import("child_process");
-        const dockerArgs = ["run", "-d", "-p", `${body.gatewayPort}:18789`,
+        const dockerArgs = ["run", "-d", "--pull", "always", "-p", `${body.gatewayPort}:18789`,
           "--add-host", "host.docker.internal:host-gateway",
           "-e", `WINCLAW_GRC_URL=http://host.docker.internal:${grcPort}`,
           "-e", `WINCLAW_GATEWAY_BIND=lan`,
@@ -529,6 +532,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         if (body.employeeName) dockerArgs.push("-e", `employee_name=${body.employeeName}`);
         if (body.employeeCode) dockerArgs.push("-e", `employee_code=${body.employeeCode}`);
         if (body.employeeEmail) dockerArgs.push("-e", `employee_email=${body.employeeEmail}`);
+        if (body.githubToken) dockerArgs.push("-e", `GITHUB_TOKEN=${body.githubToken}`);
         dockerArgs.push("-v", `${body.workspacePath}:/home/winclaw/.winclaw/workspace`);
         // Persist device identity inside workspace dir so each node has unique identity
         const identityPath = path.join(body.workspacePath, ".identity");
@@ -995,6 +999,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         if (node.employeeName) dockerArgs.push("-e", `employee_name=${node.employeeName}`);
         if (node.employeeId) dockerArgs.push("-e", `employee_code=${node.employeeId}`);
         if (node.employeeEmail) dockerArgs.push("-e", `employee_email=${node.employeeEmail}`);
+        if (node.githubToken) dockerArgs.push("-e", `GITHUB_TOKEN=${node.githubToken}`);
         if (node.workspacePath) {
           dockerArgs.push("-v", `${node.workspacePath}:/home/winclaw/.winclaw/workspace`);
           dockerArgs.push("-v", `${identityPath}:/home/winclaw/.winclaw/identity`);
@@ -1016,6 +1021,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           employeeName: node.employeeName,
           employeeId: node.employeeId,
           employeeEmail: node.employeeEmail,
+          githubToken: node.githubToken,
         };
 
         // DO NOT delete node record — keep it alive so data is never lost.
@@ -1106,6 +1112,7 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
               ...(preservedData.employeeName && { employeeName: preservedData.employeeName }),
               ...(preservedData.employeeId && { employeeId: preservedData.employeeId }),
               ...(preservedData.employeeEmail && { employeeEmail: preservedData.employeeEmail }),
+              ...(preservedData.githubToken && { githubToken: preservedData.githubToken }),
               createdAt: new Date(),
               updatedAt: new Date(),
             })

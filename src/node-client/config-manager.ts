@@ -9,8 +9,9 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
-import type { NodeConfig, ConfigManagerOptions } from "./types.js";
+import type { NodeConfig, ConfigManagerOptions, KeyConfigEntry } from "./types.js";
 
 interface PersistedState {
   appliedRevision: number;
@@ -20,12 +21,14 @@ interface PersistedState {
 
 export class ConfigManager {
   private readonly configDir: string;
+  private readonly winclawHome: string;
   private readonly onApplied?: (config: NodeConfig) => void | Promise<void>;
   private readonly onError?: (error: Error, config: NodeConfig) => void | Promise<void>;
   private appliedRevision = 0;
 
   constructor(options: ConfigManagerOptions) {
     this.configDir = options.configDir;
+    this.winclawHome = options.winclawHome ?? path.join(os.homedir(), ".winclaw");
     this.onApplied = options.onConfigApplied;
     this.onError = options.onConfigError;
 
@@ -117,6 +120,13 @@ export class ConfigManager {
     if (keyConfig.auxiliary) {
       this.writeEnvKeyFile(keysDir, "auxiliary", keyConfig.auxiliary);
     }
+
+    // Sync into winclaw.json so the chat UI can discover the model
+    try {
+      this.syncToWinclawJson(keyConfig);
+    } catch {
+      // Non-fatal: llm-keys.json was written successfully
+    }
   }
 
   private writeEnvKeyFile(
@@ -150,6 +160,135 @@ export class ConfigManager {
     fs.writeFileSync(
       path.join(this.configDir, "config-meta.json"),
       JSON.stringify(meta, null, 2),
+      "utf-8",
+    );
+  }
+
+  // ── WinClaw JSON Sync ─────────────────────────
+
+  /**
+   * Detect the WinClaw API wire format from provider/baseUrl.
+   */
+  private detectApiType(
+    provider: string,
+    baseUrl?: string,
+  ): string {
+    const url = baseUrl ?? "";
+    const prov = provider.toLowerCase();
+    if (url.includes("anthropic") || prov === "anthropic" || prov === "glm") {
+      return "anthropic-messages";
+    }
+    if (url.includes(":11434") || prov.includes("ollama")) {
+      return "ollama";
+    }
+    if (prov === "google") {
+      return "google-generative-ai";
+    }
+    return "openai-completions";
+  }
+
+  /**
+   * Normalise baseUrl for the detected api type.
+   * Ollama native API expects no /v1 suffix and uses 127.0.0.1.
+   */
+  private normalizeBaseUrl(baseUrl: string, apiType: string): string {
+    if (apiType === "ollama") {
+      return baseUrl
+        .replace(/\/v1\/?$/, "")
+        .replace(/localhost/g, "127.0.0.1");
+    }
+    return baseUrl;
+  }
+
+  /**
+   * Build a WinClaw provider entry from a KeyConfigEntry.
+   */
+  private buildProviderEntry(
+    entry: KeyConfigEntry,
+  ): Record<string, unknown> {
+    const apiType = this.detectApiType(entry.provider, entry.baseUrl);
+    const baseUrl = entry.baseUrl
+      ? this.normalizeBaseUrl(entry.baseUrl, apiType)
+      : undefined;
+
+    return {
+      ...(baseUrl ? { baseUrl } : {}),
+      api: apiType,
+      apiKey: entry.apiKey,
+      models: [
+        {
+          id: entry.model,
+          name: entry.model,
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 32768,
+          maxTokens: 8192,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Sync key_config into winclaw.json's models.providers section
+   * so the chat UI can discover and use GRC-pushed models.
+   */
+  private syncToWinclawJson(
+    keyConfig: NonNullable<NodeConfig["key_config"]>,
+  ): void {
+    const winclawJsonPath = path.join(this.winclawHome, "winclaw.json");
+    const grcProvidersPath = path.join(this.winclawHome, ".grc-key-providers.json");
+
+    // Read existing winclaw.json
+    let winclaw: Record<string, unknown>;
+    try {
+      winclaw = JSON.parse(fs.readFileSync(winclawJsonPath, "utf-8"));
+    } catch {
+      // No winclaw.json — skip sync
+      return;
+    }
+
+    // Ensure models.providers exists
+    const models = (winclaw.models ?? {}) as Record<string, unknown>;
+    const providers = (models.providers ?? {}) as Record<string, unknown>;
+
+    const grcProviderNames: string[] = [];
+
+    // Primary → "custom" provider
+    if (keyConfig.primary) {
+      providers.custom = this.buildProviderEntry(keyConfig.primary);
+      grcProviderNames.push("custom");
+    }
+
+    // Auxiliary → "google" provider (if present)
+    if (keyConfig.auxiliary) {
+      providers.google = this.buildProviderEntry(keyConfig.auxiliary);
+      grcProviderNames.push("google");
+    }
+
+    models.providers = providers;
+    winclaw.models = models;
+
+    // Update agents.defaults.model and models alias to match primary
+    if (keyConfig.primary) {
+      const agents = (winclaw.agents ?? {}) as Record<string, unknown>;
+      const defaults = (agents.defaults ?? {}) as Record<string, unknown>;
+      const modelRef = `custom/${keyConfig.primary.model}`;
+      defaults.model = modelRef;
+      defaults.models = {
+        [modelRef]: { alias: keyConfig.primary.model },
+      };
+      agents.defaults = defaults;
+      winclaw.agents = agents;
+    }
+
+    // Write back winclaw.json
+    fs.writeFileSync(winclawJsonPath, JSON.stringify(winclaw, null, 2), "utf-8");
+
+    // Update .grc-key-providers.json
+    fs.writeFileSync(
+      grcProvidersPath,
+      JSON.stringify({ providers: grcProviderNames }),
       "utf-8",
     );
   }

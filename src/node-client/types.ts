@@ -72,6 +72,8 @@ export interface SSEClientOptions extends A2AClientOptions {
 export interface ConfigManagerOptions {
   /** Directory to write config files into (e.g. ~/.winclaw/config/) */
   configDir: string;
+  /** WinClaw home directory (default: ~/.winclaw). Used to sync key_config into winclaw.json */
+  winclawHome?: string;
   /** Callback when config is applied successfully */
   onConfigApplied?: (config: NodeConfig) => void | Promise<void>;
   /** Callback when config application fails */

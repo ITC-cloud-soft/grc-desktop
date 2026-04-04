@@ -11,6 +11,9 @@ import {
   createCipheriv,
   createDecipheriv,
 } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { eq, desc, sql, and, like } from "drizzle-orm";
 import pino from "pino";
 import { getDb } from "../../shared/db/connection.js";
@@ -424,6 +427,11 @@ export class ModelKeysService {
     // Push config update to node via SSE (if connected)
     this.pushConfigToNode(nodeId, newRevision, "key_assignment");
 
+    // Sync directly to local winclaw.json (always, regardless of SSE)
+    if (keyConfigJson) {
+      this.syncKeyConfigToWinclawJson(keyConfigJson);
+    }
+
     const updated = await db
       .select()
       .from(nodesTable)
@@ -597,6 +605,11 @@ export class ModelKeysService {
 
       // Push config update to node via SSE (if connected)
       this.pushConfigToNode(node.nodeId, currentRevision + 1, "key_update");
+
+      // Sync directly to local winclaw.json
+      if (hasAny) {
+        this.syncKeyConfigToWinclawJson(keyConfig);
+      }
     }
   }
 
@@ -659,8 +672,112 @@ export class ModelKeysService {
           key_config: keyConfig,
         },
       });
+
     } catch (err) {
       logger.warn({ nodeId, err }, "Failed to push config via SSE");
+    }
+  }
+
+  // ── WinClaw JSON Direct Sync ────────────────
+
+  /**
+   * Detect WinClaw API wire format from provider/baseUrl.
+   */
+  private static detectApiType(provider: string, baseUrl?: string): string {
+    const url = (baseUrl ?? "").toLowerCase();
+    const prov = provider.toLowerCase();
+    if (url.includes("anthropic") || prov === "anthropic" || prov === "glm") {
+      return "anthropic-messages";
+    }
+    if (url.includes(":11434") || prov.includes("ollama")) {
+      return "ollama";
+    }
+    if (prov === "google") {
+      return "google-generative-ai";
+    }
+    return "openai-completions";
+  }
+
+  /**
+   * Normalise baseUrl for the detected api type.
+   */
+  private static normalizeBaseUrl(baseUrl: string, apiType: string): string {
+    if (apiType === "ollama") {
+      return baseUrl.replace(/\/v1\/?$/, "").replace(/localhost/g, "127.0.0.1");
+    }
+    return baseUrl;
+  }
+
+  /**
+   * Build a WinClaw provider entry from a key config entry.
+   */
+  private static buildProviderEntry(
+    entry: { provider: string; model: string; apiKey: string; baseUrl?: string },
+  ): Record<string, unknown> {
+    const apiType = ModelKeysService.detectApiType(entry.provider, entry.baseUrl);
+    const baseUrl = entry.baseUrl
+      ? ModelKeysService.normalizeBaseUrl(entry.baseUrl, apiType)
+      : undefined;
+
+    return {
+      ...(baseUrl ? { baseUrl } : {}),
+      api: apiType,
+      apiKey: entry.apiKey,
+      models: [{ id: entry.model, name: entry.model }],
+    };
+  }
+
+  /**
+   * Sync key_config directly into ~/.winclaw/winclaw.json
+   * so the WinClaw chat UI can discover GRC-pushed models immediately.
+   */
+  private syncKeyConfigToWinclawJson(
+    keyConfig: KeyConfigJson,
+  ): void {
+    try {
+      const winclawHome = path.join(os.homedir(), ".winclaw");
+      const winclawJsonPath = path.join(winclawHome, "winclaw.json");
+      const grcProvidersPath = path.join(winclawHome, ".grc-key-providers.json");
+
+      if (!fs.existsSync(winclawJsonPath)) return;
+
+      const winclaw = JSON.parse(fs.readFileSync(winclawJsonPath, "utf-8"));
+      const models = (winclaw.models ?? {}) as Record<string, unknown>;
+      const providers = (models.providers ?? {}) as Record<string, unknown>;
+      const grcProviderNames: string[] = [];
+
+      // Primary → "custom" provider
+      if (keyConfig.primary) {
+        providers.custom = ModelKeysService.buildProviderEntry(keyConfig.primary);
+        grcProviderNames.push("custom");
+      }
+
+      // Auxiliary → "google" provider
+      if (keyConfig.auxiliary) {
+        providers.google = ModelKeysService.buildProviderEntry(keyConfig.auxiliary);
+        grcProviderNames.push("google");
+      }
+
+      models.providers = providers;
+      winclaw.models = models;
+
+      // Update agents.defaults.model + models alias
+      if (keyConfig.primary) {
+        const agents = (winclaw.agents ?? {}) as Record<string, unknown>;
+        const defaults = (agents.defaults ?? {}) as Record<string, unknown>;
+        const modelRef = `custom/${keyConfig.primary.model}`;
+        defaults.model = modelRef;
+        defaults.models = { [modelRef]: { alias: keyConfig.primary.model } };
+        agents.defaults = defaults;
+        winclaw.agents = agents;
+      }
+
+      fs.writeFileSync(winclawJsonPath, JSON.stringify(winclaw, null, 2), "utf-8");
+      fs.writeFileSync(grcProvidersPath, JSON.stringify({ providers: grcProviderNames }), "utf-8");
+
+      logger.info("Synced key_config to winclaw.json");
+    } catch (err) {
+      logger.warn({ err }, "Failed to sync key_config to winclaw.json (non-fatal)");
     }
   }
 }

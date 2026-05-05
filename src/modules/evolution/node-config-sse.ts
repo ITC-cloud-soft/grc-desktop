@@ -67,6 +67,10 @@ export interface CommunitySSEEvent {
 export interface ConfigUpdateEvent {
   revision: number;
   reason: string;
+  /** Raw API key — only included in api_key_authorized events */
+  api_key?: string;
+  /** API key record ID — only included in api_key_authorized events */
+  api_key_id?: string;
   /** If provided, the full config payload so the node doesn't need a second pull */
   config?: {
     role_id: string | null;

@@ -699,6 +699,63 @@ export class AuthService implements IAuthService {
     return existingKeys.length > 0;
   }
 
+  /**
+   * Inspect the API Key referenced by a node.apiKeyId, optionally verifying
+   * that the raw key the client sent matches what the DB has stored.
+   *
+   * Used by the hello handler to detect orphaned / mismatched states
+   * (e.g. winclaw.json wiped while DB still has apiKeyId, or admin
+   * "剔除→授権" cycled while winclaw was disconnected).
+   *
+   * @param keyId  The api_keys.id value stored in nodes.api_key_id
+   * @param rawKey Optional raw key the client sent via x-api-key header
+   * @returns      exists=true if the row is still in api_keys;
+   *               matches=true iff exists && rawKey && sha256(rawKey)===keyHash
+   */
+  async inspectNodeApiKey(
+    keyId: string,
+    rawKey?: string,
+  ): Promise<{ exists: boolean; matches: boolean; keyPrefix: string | null }> {
+    const db = getDb();
+    const rows = await db
+      .select({ keyHash: apiKeys.keyHash, keyPrefix: apiKeys.keyPrefix })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, keyId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return { exists: false, matches: false, keyPrefix: null };
+    }
+
+    const dbHash = rows[0]!.keyHash;
+    const matches = rawKey ? sha256(rawKey) === dbHash : false;
+    return { exists: true, matches, keyPrefix: rows[0]!.keyPrefix };
+  }
+
+  /**
+   * Force-reissue the API Key for a node: revoke any existing
+   * `auto:node:{nodeId}` keys for this user, then create a brand-new one.
+   *
+   * Unlike `issueApiKeyForNode` (which returns the existing key with
+   * rawKey=null if one is present), this method ALWAYS returns a fresh
+   * rawKey. Callers should persist it exactly once (API response or SSE).
+   */
+  async reissueApiKeyForNode(
+    userId: string,
+    nodeId: string,
+  ): Promise<{ rawKey: string; keyId: string; keyPrefix: string }> {
+    await this.revokeApiKeyForNode(userId, nodeId);
+    const keyName = `auto:node:${nodeId}`;
+    const { rawKey, apiKey } = await this.createApiKey({
+      userId,
+      name: keyName,
+      scopes: ["read", "write", "publish"],
+      expiresAt: undefined,
+    });
+    logger.info({ keyId: apiKey.id, userId, nodeId }, "API key force-reissued for node");
+    return { rawKey, keyId: apiKey.id, keyPrefix: apiKey.keyPrefix };
+  }
+
   // ── Email Auth ────────────────────────────────
 
   /**

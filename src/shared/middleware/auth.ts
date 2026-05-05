@@ -70,42 +70,53 @@ export function createAuthMiddleware(config: GrcConfig, required = true) {
     if (apiKey) {
       // Basic format validation — reject obviously invalid keys early
       if (apiKey.length < 10) {
-        return res.status(401).json({
-          error: "invalid_api_key",
-          message: "API key format is invalid",
-        });
-      }
-
-      // Ensure the resolver has been registered (auth module is loaded)
-      if (!_apiKeyResolver) {
-        return res.status(503).json({
-          error: "service_unavailable",
-          message: "API key authentication is not available yet",
-        });
-      }
-
-      try {
-        const resolved = await _apiKeyResolver(apiKey);
-        if (!resolved) {
+        if (required) {
           return res.status(401).json({
             error: "invalid_api_key",
-            message: "API key is invalid or expired",
+            message: "API key format is invalid",
           });
         }
-
-        req.authMode = "apikey";
-        req.auth = {
-          sub: resolved.userId,
-          tier: resolved.tier,
-          role: "user", // API keys cannot have admin role
-          scopes: resolved.scopes,
-        };
-        return next();
-      } catch {
-        return res.status(500).json({
-          error: "api_key_error",
-          message: "Failed to validate API key",
-        });
+        // For optional auth, fall through to anonymous
+      } else if (!_apiKeyResolver) {
+        // Ensure the resolver has been registered (auth module is loaded)
+        if (required) {
+          return res.status(503).json({
+            error: "service_unavailable",
+            message: "API key authentication is not available yet",
+          });
+        }
+        // For optional auth, fall through to anonymous
+      } else {
+        try {
+          const resolved = await _apiKeyResolver(apiKey);
+          if (!resolved) {
+            if (required) {
+              return res.status(401).json({
+                error: "invalid_api_key",
+                message: "API key is invalid or expired",
+              });
+            }
+            // For optional auth (e.g. SSE), fall through to anonymous
+            // so nodes with revoked/invalid keys can still connect
+          } else {
+            req.authMode = "apikey";
+            req.auth = {
+              sub: resolved.userId,
+              tier: resolved.tier,
+              role: "user", // API keys cannot have admin role
+              scopes: resolved.scopes,
+            };
+            return next();
+          }
+        } catch {
+          if (required) {
+            return res.status(500).json({
+              error: "api_key_error",
+              message: "Failed to validate API key",
+            });
+          }
+          // For optional auth, fall through to anonymous
+        }
       }
     }
 

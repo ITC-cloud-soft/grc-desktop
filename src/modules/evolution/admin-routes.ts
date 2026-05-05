@@ -421,11 +421,13 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         "Node authorized by admin — API Key issued",
       );
 
-      // SSE notification: push api_key_authorized event to the node
-      // so WinClaw knows to re-hello and pick up the key
+      // SSE notification: push api_key_authorized event WITH raw key to the node
+      // so WinClaw can save the key immediately without re-hello
       nodeConfigSSE.pushToNode(nodeId, {
         revision: 0,
         reason: "api_key_authorized",
+        api_key: rawKey ?? undefined,
+        api_key_id: keyId,
       });
 
       res.json({ ok: true, message: "Node authorized", api_key_id: keyId, ...(rawKey ? { api_key: rawKey } : {}) });
@@ -465,6 +467,12 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
         { nodeId, admin: req.auth?.sub },
         "Node authorization revoked by admin — API Key deleted",
       );
+
+      // SSE notification: tell WinClaw to clear its API key
+      nodeConfigSSE.pushToNode(nodeId, {
+        revision: 0,
+        reason: "api_key_revoked",
+      });
 
       res.json({ ok: true, message: "Authorization revoked" });
     }),
@@ -1121,17 +1129,20 @@ export async function registerAdmin(app: Express, config: GrcConfig) {
           await db.delete(nodesTable).where(eq(nodesTable.nodeId, nodeId));
           logger.info({ oldNodeId: nodeId, newNodeId, newContainerId, gatewayUrl }, "Local Docker node restarted (new identity)");
         } else {
-          // Same nodeId or hello hasn't registered yet — update the existing record directly
+          // Same nodeId or hello hasn't registered yet — update the existing record directly.
+          // IMPORTANT: include gatewayPort to keep DB in sync with actual docker port mapping.
+          // Without this, repeated 换水 with port reassignment leaves DB stale → "Gateway" button breaks.
           await db
             .update(nodesTable)
             .set({
               containerId: newContainerId.slice(0, 64),
+              gatewayPort: node.gatewayPort,
               gatewayUrl,
               createdAt: new Date(),
               updatedAt: new Date(),
             })
             .where(eq(nodesTable.nodeId, nodeId));
-          logger.info({ nodeId, newContainerId, gatewayUrl }, "Local Docker node restarted (same identity)");
+          logger.info({ nodeId, newContainerId, gatewayPort: node.gatewayPort, gatewayUrl }, "Local Docker node restarted (same identity)");
         }
 
         // Ensure API Key exists for restarted node (same as new provision)

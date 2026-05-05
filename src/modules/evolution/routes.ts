@@ -151,18 +151,94 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
       // hello → propagate → config_update SSE → node re-syncs → hello → loop
 
       // ── API Key handling ──────────────────────────
-      // Per review: do NOT re-issue key on every hello.
-      // - If node already has apiKeyId → return status only (no rawKey)
-      // - If node is provisioned (Docker) but has no key yet → auto-issue once
+      // A案改良版 (2026-04-22): detect orphaned / mismatched apiKeyId state
+      // and auto-reissue so nodes self-heal after winclaw.json loss, offline
+      // 剔除/授権 cycles, or DB drift.
+      //
+      // Decision matrix (nodeRecord.apiKeyId present case):
+      //   DB row missing (orphan)          → reissue (status=reissued_orphan)
+      //   client header matches DB hash    → active (no rotation)
+      //   client header missing / mismatch → reissue (status=rotated)
+      //
+      // IMPORTANT: do NOT call nodeConfigSSE.pushToNode(...) during reissue.
+      //   Past incident (routes.ts:150 comment) — SSE push during hello
+      //   caused infinite loop: hello → push → node re-syncs → hello.
+      //   The rawKey travels back to the client in this hello response only.
       const nodeRecord = node as Record<string, unknown>;
+      const clientApiKey = typeof req.headers["x-api-key"] === "string"
+        ? req.headers["x-api-key"] as string
+        : undefined;
       let apiKeyResponse: Record<string, unknown> = {};
 
       if (nodeRecord.apiKeyId) {
-        // Node already has an API Key — tell WinClaw it's active
-        apiKeyResponse = {
-          api_key_status: "active",
-          api_key_id: nodeRecord.apiKeyId,
-        };
+        const keyId = nodeRecord.apiKeyId as string;
+        try {
+          const inspection = await authService.inspectNodeApiKey(keyId, clientApiKey);
+
+          if (!inspection.exists) {
+            // Orphan: nodes.api_key_id references a row that no longer exists
+            // in api_keys (e.g. admin deleted key directly, or DB restore).
+            const { rawKey, keyId: newKeyId } = await authService.reissueApiKeyForNode(
+              nodeUser.id,
+              body.node_id,
+            );
+            await getDb()
+              .update(nodesTable)
+              .set({ apiKeyId: newKeyId, apiKeyAuthorized: 1 as unknown as boolean })
+              .where(eq(nodesTable.nodeId, body.node_id));
+            apiKeyResponse = {
+              api_key: rawKey,
+              api_key_status: "reissued_orphan",
+              api_key_id: newKeyId,
+            };
+            logger.warn(
+              { nodeId: body.node_id, orphanKeyId: keyId, newKeyId },
+              "API key orphaned (DB row missing) — reissued via hello",
+            );
+          } else if (inspection.matches) {
+            // Healthy: client and DB agree. No rotation.
+            apiKeyResponse = {
+              api_key_status: "active",
+              api_key_id: keyId,
+            };
+          } else {
+            // Mismatch: client either has no apiKey in winclaw.json (lost it)
+            // or holds a key that doesn't match the current DB hash (stale
+            // after 剔除/授権 cycle while offline). Rotate + return fresh rawKey.
+            const { rawKey, keyId: newKeyId } = await authService.reissueApiKeyForNode(
+              nodeUser.id,
+              body.node_id,
+            );
+            await getDb()
+              .update(nodesTable)
+              .set({ apiKeyId: newKeyId, apiKeyAuthorized: 1 as unknown as boolean })
+              .where(eq(nodesTable.nodeId, body.node_id));
+            apiKeyResponse = {
+              api_key: rawKey,
+              api_key_status: "rotated",
+              api_key_id: newKeyId,
+            };
+            logger.info(
+              {
+                nodeId: body.node_id,
+                oldKeyId: keyId,
+                newKeyId,
+                reason: clientApiKey ? "client_key_mismatch" : "client_key_missing",
+              },
+              "API key rotated via hello — client state diverged from DB",
+            );
+          }
+        } catch (err) {
+          logger.warn(
+            { nodeId: body.node_id, keyId, err },
+            "Failed to inspect/reissue API key during hello (keeping existing state)",
+          );
+          // Fall back to treating it as active so we don't break the hello
+          apiKeyResponse = {
+            api_key_status: "active",
+            api_key_id: keyId,
+          };
+        }
       } else if (nodeRecord.provisioningMode) {
         // Docker/Daytona node without API Key yet — auto-issue on first hello
         try {
@@ -176,7 +252,7 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
             api_key_status: "new",
             api_key_id: keyId,
           };
-          logger.info({ nodeId: body.node_id, keyId }, "API key auto-issued for provisioned node on first hello");
+          logger.info({ nodeId: body.node_id, keyId }, "API key auto-issued for node on first hello");
         } catch (err) {
           logger.warn({ nodeId: body.node_id, err }, "Failed to auto-issue API key for node");
         }
@@ -599,15 +675,16 @@ export async function register(app: Express, config: GrcConfig): Promise<void> {
 
       // API Key query parameter authentication for SSE
       // (EventSource cannot set custom headers, so api_key is passed as query param)
+      // NOTE: If the API key is invalid/revoked, we still allow the SSE connection
+      // so that the node can receive api_key_authorized events when admin authorizes it.
       const apiKeyParam = req.query.api_key as string | undefined;
       if (apiKeyParam && !req.auth?.sub) {
         const resolved = await authService.resolveApiKey(apiKeyParam);
-        if (!resolved) {
-          res.status(401).json({ ok: false, error: "invalid_api_key" });
-          return;
+        if (resolved) {
+          // Attach resolved auth to request so downstream logic can use it
+          (req as any).auth = { sub: resolved.userId, tier: resolved.tier, scopes: resolved.scopes };
         }
-        // Attach resolved auth to request so downstream logic can use it
-        (req as any).auth = { sub: resolved.userId, tier: resolved.tier, scopes: resolved.scopes };
+        // If key is invalid, continue without auth — SSE is authOptional
       }
 
       // Set SSE headers
